@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <ctime>
 #include <unistd.h>
+#include <algorithm>
 
 App::App() : browser_(*this, ROOT_DIR), ui_(*this)
 {
@@ -37,6 +38,8 @@ bool App::init()
     if (!player_.create(lv_screen_active(), 800, 1280)) {
         LV_LOG_WARN("lv_ffmpeg_player_create failed");
     }
+
+    fitToScreen(VIDEO_PATH);   /* probe native size, size widget to contain-fit */
 
     screen_ = lv_screen_active();
 
@@ -144,6 +147,7 @@ void App::onSeekRelease(int32_t ms)
 void App::playFile(const std::string & path)
 {
     if (player_.obj()) {
+        fitToScreen(path.c_str());   /* re-fit for the new clip's aspect ratio */
         player_.setSrc(path.c_str());
         player_.start();
         ui_.setNowPlaying(path.c_str());
@@ -151,6 +155,36 @@ void App::playFile(const std::string & path)
     }
     audio_.reopen(path);
     browser_.close();
+}
+
+void App::fitVideo(int vw, int vh, int * rw, int * rh)
+{
+    const int DW = 800, DH = 1280;
+    if (vw <= 0 || vh <= 0) { *rw = DW; *rh = DH; return; }
+    /* contain: scale so the whole video fits inside the screen, preserving
+     * aspect ratio (letterbox bars show the black background, never cropped). */
+    double scale = std::min((double)DW / vw, (double)DH / vh);
+    int w = (int)(vw * scale);
+    int h = (int)(vh * scale);
+    if (w > DW) w = DW;
+    if (h > DH) h = DH;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    *rw = w; *rh = h;
+}
+
+void App::fitToScreen(const char * path)
+{
+    int vw = 0, vh = 0;
+    if (player_.probe(path, &vw, &vh)) {
+        int rw = 0, rh = 0;
+        fitVideo(vw, vh, &rw, &rh);
+        player_.resize(rw, rh);
+        fprintf(stderr, "[fit] %s %dx%d -> render %dx%d\n", path, vw, vh, rw, rh);
+    } else {
+        player_.resize(800, 1280);   /* unknown size: fill the screen */
+        fprintf(stderr, "[fit] %s probe failed -> full screen\n", path);
+    }
 }
 
 void App::toggleBrowser()

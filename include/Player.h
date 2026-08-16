@@ -26,6 +26,15 @@ public:
     /* Create the player widget, fill it to w x h and center it on the screen. */
     bool create(lv_obj_t * parent, int w, int h);
 
+    /* Resize the player widget to w x h and re-center it. The patched
+     * lv_ffmpeg scales the decoded frame to this size, so callers should pass
+     * a contain-fit of the source aspect ratio (see App::fitVideo). */
+    void resize(int w, int h);
+
+    /* Probe a video file for its native width/height via FFmpeg.
+     * Returns true and fills w/h on success. */
+    bool probe(const char * path, int * w, int * h);
+
     /* Load a video file. Returns true on success. */
     bool setSrc(const char * path);
 

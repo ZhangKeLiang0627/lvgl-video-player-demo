@@ -40,6 +40,14 @@ private:
     void        uiRefresh();
     static uint32_t nowMs();
 
+    /* Compute a contain-fit rectangle of (vw x vh) inside the 800x1280 screen,
+     * preserving aspect ratio (no crop, no distortion). */
+    void fitVideo(int vw, int vh, int * rw, int * rh);
+
+    /* Probe `path` for native size and resize the player widget to its
+     * contain-fit; fall back to full screen if probing fails. */
+    void fitToScreen(const char * path);
+
     Player      player_;
     AudioEngine audio_;
     FileBrowser browser_;

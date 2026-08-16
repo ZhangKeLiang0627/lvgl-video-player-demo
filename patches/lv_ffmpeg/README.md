@@ -21,6 +21,13 @@ LVGL 自带的 `lv_ffmpeg` 播放器（`src/libs/ffmpeg/lv_ffmpeg.c`）只提供
    - `lv_ffmpeg_player_get_duration(lv_obj_t*) -> int32_t`（毫秒，
      取最长流的时长作为兜底）
 
+5. **渲染缓冲跟随播放器对象尺寸**（`render_w` / `render_h`）：`lv_ffmpeg` 原本把
+   LVGL 图像缓冲和 YUV→RGB 转换都按**视频原生分辨率**做，导致大分辨率视频既被裁切
+   又因每帧做数百万像素的 YUV→RGB 而只有 1–2 帧。补丁改为在每帧把解码帧用
+   `sws_scale` 缩放到**播放器对象的实际尺寸**（由上层按源宽高比 contain 进屏幕后设置），
+   从而在不浪费算力的情况下实现「适配屏幕」并让高分辨率视频流畅播放。对象尺寸变化
+   时会在定时器回调里自动重分配缓冲（见 `lv_ffmpeg_player_frame_update_cb`）。
+
 ## 自动应用（推荐）
 
 `CMakeLists.txt` 在 `add_subdirectory(lvgl)` 之前会执行一次幂等的
