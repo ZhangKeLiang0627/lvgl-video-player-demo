@@ -25,7 +25,9 @@ LVGL_INC  = ../lvgl/include/lvgl
 # consumers of the `lvgl` target.
 # FFMPEG_PREFIX lets you build against a non-system FFmpeg (e.g. a Rockchip
 # build with RKMPP hardware decode). When set, headers/libs are taken from
-# $(FFMPEG_PREFIX)/include/aarch64-linux-gnu and .../lib/aarch64-linux-gnu.
+# $(FFMPEG_PREFIX)/usr/include/aarch64-linux-gnu and
+# $(FFMPEG_PREFIX)/usr/lib/aarch64-linux-gnu. This matches the layout produced
+# by `dpkg-deb -x <rockchip-ffmpeg>.deb $(FFMPEG_PREFIX)` (note the usr/ layer).
 # Leave empty to use the system FFmpeg via pkg-config (software decode). At
 # runtime the matching libs must be on LD_LIBRARY_PATH (e.g. the same prefix).
 FFMPEG_PREFIX ?=
@@ -33,8 +35,8 @@ ifeq ($(FFMPEG_PREFIX),)
   FFMPEG_CFLAGS  =
   FFMPEG_LDFLAGS =
 else
-  FFMPEG_CFLAGS  = -I $(FFMPEG_PREFIX)/include/aarch64-linux-gnu
-  FFMPEG_LDFLAGS = -L $(FFMPEG_PREFIX)/lib/aarch64-linux-gnu -Wl,-rpath,$(FFMPEG_PREFIX)/lib/aarch64-linux-gnu
+  FFMPEG_CFLAGS  = -I $(FFMPEG_PREFIX)/usr/include/aarch64-linux-gnu
+  FFMPEG_LDFLAGS = -L $(FFMPEG_PREFIX)/usr/lib/aarch64-linux-gnu -Wl,-rpath,$(FFMPEG_PREFIX)/usr/lib/aarch64-linux-gnu
 endif
 
 CFLAGS    = -I $(LVGL_SRC) -I $(LVGL_INC) -I include -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall $(FFMPEG_CFLAGS)
