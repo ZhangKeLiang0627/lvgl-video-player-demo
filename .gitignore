@@ -1,0 +1,16 @@
+# Build artifacts (device Makefile)
+*.o
+demo
+
+# Build artifacts (CMake)
+build/
+cmake-build-*/
+
+# Editor / OS noise
+*.swp
+.DS_Store
+.vscode/
+.idea/
+
+# Never commit the LVGL submodule source; only its pointer.
+lvgl/
