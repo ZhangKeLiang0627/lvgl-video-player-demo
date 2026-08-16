@@ -40,6 +40,6 @@
  * will spin inside the allocator. 32 MB is comfortable for this panel. */
 #define LV_MEM_SIZE         (32 * 1024 * 1024)
 #define LV_MEM_ADR          0
-#define LV_DEF_REFR_PERIOD   33
+#define LV_DEF_REFR_PERIOD   16
 
 #endif /* LV_CONF_H */
