@@ -5,7 +5,7 @@
 #  (i.e. /home/cat/lvgl_video_player/ next to /home/cat/lvgl/).
 #
 #  The lv_ffmpeg.c patch MUST be applied first, see patches/lv_ffmpeg/:
-#      python3 patches/lv_ffmpeg/patch_lvffmpeg_v3.py   (run inside ../lvgl)
+#      git apply -p1 patches/lv_ffmpeg/lv_ffmpeg_v9.5.0.patch   (run inside ../lvgl)
 #
 #  Build & run:
 #      make

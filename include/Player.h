@@ -7,7 +7,7 @@
  * Thin C++ wrapper around the (patched) lv_ffmpeg player object.
  *
  * The patched helpers pause/resume/seek/get_time/get_duration are NOT part of
- * upstream lv_ffmpeg; they are added by patches/lv_ffmpeg/patch_lvffmpeg_v3.py.
+ * upstream lv_ffmpeg; they are added by patches/lv_ffmpeg/lv_ffmpeg_v9.5.0.patch.
  * We forward-declare them here (as extern "C") so the rest of the project never
  * has to touch lv_ffmpeg.h or the patch internals.
  */

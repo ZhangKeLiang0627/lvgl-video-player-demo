@@ -1,0 +1,9 @@
+# Keep the lv_ffmpeg patch with LF line endings so `git apply` / `patch`
+# always succeed regardless of the cloner's core.autocrlf setting.
+*.patch text eol=lf
+
+# Source / config files are edited on the host but built on Linux (framebuffer).
+*.c text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+lv_conf.h text eol=lf

@@ -6,14 +6,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- LVGL (as a git submodule, expected at ./lvgl) -------------------------
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/lvgl/CMakeLists.txt)
-    # Apply the lv_ffmpeg patch once, if not already applied.
-    execute_process(
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/patches/lv_ffmpeg/patch_lvffmpeg_v3.py
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/lvgl
-        RESULT_VARIABLE PATCH_RC
-    )
-    if(NOT PATCH_RC EQUAL 0 AND NOT PATCH_RC EQUAL 0)
-        message(WARNING "lv_ffmpeg patch step returned ${PATCH_RC} (may already be applied)")
+    # Apply the lv_ffmpeg patch (adds pause / resume / seek / get_time /
+    # get_duration on top of the stock "fire-and-forget" decoder) once.
+    find_program(GIT_EXECUTABLE git)
+    set(LV_FFMPEG_PATCH ${CMAKE_CURRENT_SOURCE_DIR}/patches/lv_ffmpeg/lv_ffmpeg_v9.5.0.patch)
+    execute_process(COMMAND ${GIT_EXECUTABLE} -C ${CMAKE_CURRENT_SOURCE_DIR}/lvgl apply --check ${LV_FFMPEG_PATCH}
+                    OUTPUT_QUIET ERROR_QUIET RESULT_VARIABLE PATCH_CHK)
+    if(PATCH_CHK EQUAL 0)
+        execute_process(COMMAND ${GIT_EXECUTABLE} -C ${CMAKE_CURRENT_SOURCE_DIR}/lvgl apply ${LV_FFMPEG_PATCH}
+                        RESULT_VARIABLE PATCH_RC)
+        if(NOT PATCH_RC EQUAL 0)
+            message(WARNING "lv_ffmpeg patch failed to apply (rc=${PATCH_RC})")
+        else()
+            message(STATUS "lv_ffmpeg patch applied")
+        endif()
+    else()
+        message(STATUS "lv_ffmpeg patch already applied or not applicable (skipping)")
     endif()
 
     set(LV_CONF_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lv_conf.h CACHE STRING "" FORCE)

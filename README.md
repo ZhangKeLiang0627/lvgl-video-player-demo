@@ -43,7 +43,7 @@ lvgl-video-player/
 │   ├── FileBrowser.cpp
 │   └── Ui.cpp
 ├── patches/lv_ffmpeg/          # 给 lv_ffmpeg.c 打的补丁（pause/seek/duration）
-│   ├── patch_lvffmpeg_v3.py
+│   ├── lv_ffmpeg_v9.5.0.patch
 │   └── README.md
 └── docs/
     └── architecture.md         # 模块设计与音画同步原理
@@ -57,9 +57,10 @@ lvgl-video-player/
 与 `/home/cat/lvgl/` 并列），先给 `lv_ffmpeg.c` 打补丁，再编译：
 
 ```sh
-# 1) 应用补丁（只需一次）
+# 1) 应用补丁（只需一次；LVGL 需为 v9.5.0）
 cd /home/cat/lvgl
-python3 /home/cat/lvgl_video_player/patches/lv_ffmpeg/patch_lvffmpeg_v3.py
+git apply -p1 /home/cat/lvgl_video_player/patches/lv_ffmpeg/lv_ffmpeg_v9.5.0.patch
+# 若 lvgl 不是 git 树： patch -p1 -N -i /home/cat/lvgl_video_player/patches/lv_ffmpeg/lv_ffmpeg_v9.5.0.patch
 
 # 2) 编译
 cd /home/cat/lvgl_video_player

@@ -12,5 +12,4 @@ cmake-build-*/
 .vscode/
 .idea/
 
-# Never commit the LVGL submodule source; only its pointer.
-lvgl/
+# LVGL is tracked as a git submodule (only its gitlink/pointer is committed).

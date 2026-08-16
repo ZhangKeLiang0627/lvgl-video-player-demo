@@ -1,0 +1,168 @@
+--- a/src/libs/ffmpeg/lv_ffmpeg.c
++++ b/src/libs/ffmpeg/lv_ffmpeg.c
+@@ -17,6 +17,7 @@
+ #include <libavutil/imgutils.h>
+ #include <libavutil/samplefmt.h>
+ #include <libavutil/timestamp.h>
++#include <libavutil/time.h>
+ #include <libswscale/swscale.h>
+ 
+ /*********************
+@@ -61,6 +62,12 @@
+     int video_dst_linesize[4];
+     enum AVPixelFormat video_dst_pix_fmt;
+     bool has_alpha;
++    int64_t play_start_us;
++    int64_t next_pts_us;
++    int64_t paused_accum_us;
++    int64_t pause_start_us;
++    bool paused;
++    AVRational tb;
+     lv_draw_buf_t draw_buf;
+     lv_draw_buf_handlers_t draw_buf_handlers;
+ };
+@@ -246,6 +253,7 @@
+         case LV_FFMPEG_PLAYER_CMD_START:
+             av_seek_frame(player->ffmpeg_ctx->fmt_ctx,
+                           0, 0, AVSEEK_FLAG_BACKWARD);
++            player->ffmpeg_ctx->play_start_us = av_gettime_relative();
+             lv_timer_resume(timer);
+             LV_LOG_INFO("ffmpeg player start");
+             break;
+@@ -530,6 +538,10 @@
+ 
+         /* write the frame data to output file */
+         if(dec->codec->type == AVMEDIA_TYPE_VIDEO) {
++            if(ffmpeg_ctx->frame->best_effort_timestamp != AV_NOPTS_VALUE) {
++                ffmpeg_ctx->next_pts_us = av_rescale_q(ffmpeg_ctx->frame->best_effort_timestamp,
++                                                        ffmpeg_ctx->tb, AV_TIME_BASE_Q);
++            }
+             ret = ffmpeg_output_video_frame(ffmpeg_ctx);
+         }
+ 
+@@ -691,6 +703,9 @@
+ 
+ static int ffmpeg_get_frame_refr_period(struct ffmpeg_context_s * ffmpeg_ctx)
+ {
++    ffmpeg_ctx->tb = ffmpeg_ctx->video_stream->time_base;
++    ffmpeg_ctx->play_start_us = 0;
++    ffmpeg_ctx->next_pts_us = 0;
+     int avg_frame_rate_num = ffmpeg_ctx->video_stream->avg_frame_rate.num;
+     if(avg_frame_rate_num > 0) {
+         int period = 1000 * (int64_t)ffmpeg_ctx->video_stream->avg_frame_rate.den
+@@ -952,19 +967,102 @@
+         return;
+     }
+ 
+-    int has_next = ffmpeg_update_next_frame(player->ffmpeg_ctx);
+-
+-    if(has_next < 0) {
+-        lv_ffmpeg_player_set_cmd(obj, player->auto_restart ? LV_FFMPEG_PLAYER_CMD_START : LV_FFMPEG_PLAYER_CMD_STOP);
+-        if(!player->auto_restart) {
+-            lv_obj_send_event((lv_obj_t *)player, LV_EVENT_READY, NULL);
+-        }
+-        return;
+-    }
+-
+-    lv_image_cache_drop(lv_image_get_src(obj));
+-
+-    lv_obj_invalidate(obj);
++    struct ffmpeg_context_s * c = player->ffmpeg_ctx;
++    if(c->paused) return;
++    int64_t elapsed_us = av_gettime_relative() - c->play_start_us - c->paused_accum_us;
++
++    int has_next = 0;
++    int shown = 0;
++    for(int i = 0; i < 16; i++) {
++        has_next = ffmpeg_update_next_frame(c);
++        if(has_next < 0) {
++            lv_ffmpeg_player_set_cmd(obj, player->auto_restart ? LV_FFMPEG_PLAYER_CMD_START : LV_FFMPEG_PLAYER_CMD_STOP);
++            if(!player->auto_restart) {
++                lv_obj_send_event((lv_obj_t *)player, LV_EVENT_READY, NULL);
++            }
++            return;
++        }
++        shown = 1;
++        /* drop late frames / catch up to wall-clock: stop once we reach a
++           frame scheduled for the future */
++        if(c->next_pts_us > elapsed_us) break;
++    }
++
++    if(shown) {
++        lv_image_cache_drop(lv_image_get_src(obj));
++        lv_obj_invalidate(obj);
++    }
++}
++
++/* ---- additional player control API (pause / seek / time / duration) ---- */
++
++int32_t lv_ffmpeg_player_get_duration(lv_obj_t * obj)
++{
++    lv_ffmpeg_player_t * player = (lv_ffmpeg_player_t *)obj;
++    if(!player || !player->ffmpeg_ctx) return 0;
++    AVFormatContext * fc = player->ffmpeg_ctx->fmt_ctx;
++    int64_t d = (fc->duration != AV_NOPTS_VALUE) ? fc->duration : 0;
++    if(d <= 0) {                       /* fallback: longest stream duration */
++        for(unsigned i = 0; i < fc->nb_streams; i++) {
++            AVStream * st = fc->streams[i];
++            if(st && st->duration != AV_NOPTS_VALUE && st->duration > 0) {
++                int64_t sd = av_rescale_q(st->duration, st->time_base, AV_TIME_BASE_Q);
++                if(sd > d) d = sd;
++            }
++        }
++    }
++    if(d <= 0) return 0;
++    return (int32_t)(d / 1000);   /* microseconds -> ms */
++}
++
++int32_t lv_ffmpeg_player_get_time(lv_obj_t * obj)
++{
++    lv_ffmpeg_player_t * player = (lv_ffmpeg_player_t *)obj;
++    if(!player || !player->ffmpeg_ctx) return 0;
++    struct ffmpeg_context_s * c = player->ffmpeg_ctx;
++    int64_t now_us = av_gettime_relative();
++    int64_t e;
++    if(c->paused) e = c->pause_start_us - c->play_start_us - c->paused_accum_us;
++    else          e = now_us - c->play_start_us - c->paused_accum_us;
++    if(e < 0) e = 0;
++    return (int32_t)(e / 1000);
++}
++
++lv_result_t lv_ffmpeg_player_pause(lv_obj_t * obj)
++{
++    lv_ffmpeg_player_t * player = (lv_ffmpeg_player_t *)obj;
++    if(!player || !player->ffmpeg_ctx) return LV_RESULT_INVALID;
++    struct ffmpeg_context_s * c = player->ffmpeg_ctx;
++    if(c->paused) return LV_RESULT_OK;
++    c->paused = true;
++    c->pause_start_us = av_gettime_relative();
++    return LV_RESULT_OK;
++}
++
++lv_result_t lv_ffmpeg_player_resume(lv_obj_t * obj)
++{
++    lv_ffmpeg_player_t * player = (lv_ffmpeg_player_t *)obj;
++    if(!player || !player->ffmpeg_ctx) return LV_RESULT_INVALID;
++    struct ffmpeg_context_s * c = player->ffmpeg_ctx;
++    if(!c->paused) return LV_RESULT_OK;
++    c->paused_accum_us += av_gettime_relative() - c->pause_start_us;
++    c->paused = false;
++    return LV_RESULT_OK;
++}
++
++lv_result_t lv_ffmpeg_player_seek(lv_obj_t * obj, int32_t ms)
++{
++    lv_ffmpeg_player_t * player = (lv_ffmpeg_player_t *)obj;
++    if(!player || !player->ffmpeg_ctx) return LV_RESULT_INVALID;
++    struct ffmpeg_context_s * c = player->ffmpeg_ctx;
++    AVFormatContext * fc = c->fmt_ctx;
++    int64_t target_us = (int64_t)ms * 1000;
++    int vst = (c->video_stream) ? (int)c->video_stream->index : -1;
++    int64_t ts = av_rescale_q(target_us, AV_TIME_BASE_Q, c->tb);
++    av_seek_frame(fc, vst >= 0 ? vst : -1, ts, AVSEEK_FLAG_BACKWARD);
++    /* re-anchor wall clock so get_time() returns ms */
++    c->play_start_us = av_gettime_relative() - target_us - c->paused_accum_us;
++    return LV_RESULT_OK;
+ }
+ 
+ static void lv_ffmpeg_player_constructor(const lv_obj_class_t * class_p,
