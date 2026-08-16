@@ -1,14 +1,15 @@
 --- a/src/libs/ffmpeg/lv_ffmpeg.c
 +++ b/src/libs/ffmpeg/lv_ffmpeg.c
-@@ -17,6 +17,7 @@
+@@ -17,6 +17,8 @@
  #include <libavutil/imgutils.h>
  #include <libavutil/samplefmt.h>
  #include <libavutil/timestamp.h>
 +#include <libavutil/time.h>
++#include <libavutil/hwcontext.h>
  #include <libswscale/swscale.h>
  
  /*********************
-@@ -61,8 +62,16 @@
+@@ -61,8 +63,20 @@
      int video_dst_linesize[4];
      enum AVPixelFormat video_dst_pix_fmt;
      bool has_alpha;
@@ -22,10 +23,23 @@
      lv_draw_buf_handlers_t draw_buf_handlers;
 +    int render_w;   /* current render (object) width  - 0 until first fit */
 +    int render_h;   /* current render (object) height - 0 until first fit */
++    AVFrame * sw_frame;          /* CPU frame for hw(drmprime)->cpu transfer */
++    int sws_src_w, sws_src_h;    /* cached sws source geometry */
++    enum AVPixelFormat sws_src_pix;
++    int sws_dst_w, sws_dst_h;    /* cached sws dest geometry */
  };
  
  #pragma pack(1)
-@@ -246,6 +255,7 @@
+@@ -94,7 +108,7 @@
+ static int ffmpeg_get_frame_refr_period(struct ffmpeg_context_s * ffmpeg_ctx);
+ static uint8_t * ffmpeg_get_image_data(struct ffmpeg_context_s * ffmpeg_ctx);
+ static int ffmpeg_update_next_frame(struct ffmpeg_context_s * ffmpeg_ctx);
+-static int ffmpeg_output_video_frame(struct ffmpeg_context_s * ffmpeg_ctx);
++static int ffmpeg_output_video_frame(struct ffmpeg_context_s * ffmpeg_ctx, AVFrame * frame);
+ static bool ffmpeg_pix_fmt_has_alpha(enum AVPixelFormat pix_fmt);
+ static bool ffmpeg_pix_fmt_is_yuv(enum AVPixelFormat pix_fmt);
+ 
+@@ -246,6 +260,7 @@
          case LV_FFMPEG_PLAYER_CMD_START:
              av_seek_frame(player->ffmpeg_ctx->fmt_ctx,
                            0, 0, AVSEEK_FLAG_BACKWARD);
@@ -33,26 +47,89 @@
              lv_timer_resume(timer);
              LV_LOG_INFO("ffmpeg player start");
              break;
-@@ -426,6 +436,11 @@
-     int height = ffmpeg_ctx->video_dec_ctx->height;
-     AVFrame * frame = ffmpeg_ctx->frame;
+@@ -418,46 +433,29 @@
+     return !(desc->flags & AV_PIX_FMT_FLAG_RGB) && desc->nb_components >= 2;
+ }
  
+-static int ffmpeg_output_video_frame(struct ffmpeg_context_s * ffmpeg_ctx)
++static int ffmpeg_output_video_frame(struct ffmpeg_context_s * ffmpeg_ctx, AVFrame * frame)
+ {
+     int ret = -1;
+ 
+-    int width = ffmpeg_ctx->video_dec_ctx->width;
+-    int height = ffmpeg_ctx->video_dec_ctx->height;
+-    AVFrame * frame = ffmpeg_ctx->frame;
+-
+-    if(frame->width != width
+-       || frame->height != height
+-       || frame->format != ffmpeg_ctx->video_dec_ctx->pix_fmt) {
+-
+-        /* To handle this change, one could call av_image_alloc again and
+-         * decode the following frames into another rawvideo file.
+-         */
+-        LV_LOG_ERROR("Width, height and pixel format have to be "
+-                     "constant in a rawvideo file, but the width, height or "
+-                     "pixel format of the input video changed:\n"
+-                     "old: width = %d, height = %d, format = %s\n"
+-                     "new: width = %d, height = %d, format = %s\n",
+-                     width,
+-                     height,
+-                     av_get_pix_fmt_name(ffmpeg_ctx->video_dec_ctx->pix_fmt),
+-                     frame->width, frame->height,
+-                     av_get_pix_fmt_name(frame->format));
+-        goto failed;
+-    }
+-
+-    if(ffmpeg_ctx->sws_ctx == NULL) {
++    int width = frame->width;
++    int height = frame->height;
++    enum AVPixelFormat src_pix = (enum AVPixelFormat)frame->format;
++
 +    /* Render destination size = the player object's size (the app sets it to a
 +     * contain-fit of the source aspect ratio). Falls back to native size. */
 +    int dst_w = (ffmpeg_ctx->render_w > 0) ? ffmpeg_ctx->render_w : width;
 +    int dst_h = (ffmpeg_ctx->render_h > 0) ? ffmpeg_ctx->render_h : height;
 +
-     if(frame->width != width
-        || frame->height != height
-        || frame->format != ffmpeg_ctx->video_dec_ctx->pix_fmt) {
-@@ -469,13 +484,13 @@
++    /* (Re)build the scaler only when source or destination geometry changes.
++     * The source frame may be a hardware-transferred CPU frame whose size is
++     * already downscaled by the decoder, so we track it explicitly. */
++    if(ffmpeg_ctx->sws_ctx == NULL
++       || ffmpeg_ctx->sws_src_w != width || ffmpeg_ctx->sws_src_h != height
++       || ffmpeg_ctx->sws_src_pix != src_pix
++       || ffmpeg_ctx->sws_dst_w != dst_w || ffmpeg_ctx->sws_dst_h != dst_h) {
++
+         int swsFlags = SWS_BILINEAR;
+-
+-        if(ffmpeg_pix_fmt_is_yuv(ffmpeg_ctx->video_dec_ctx->pix_fmt)) {
+-
+-            /* When the video width and height are not multiples of 8,
+-             * and there is no size change in the conversion,
+-             * a blurry screen will appear on the right side
+-             * This problem was discovered in 2012 and
+-             * continues to exist in version 4.1.3 in 2019
+-             * This problem can be avoided by increasing SWS_ACCURATE_RND
+-             */
++        if(ffmpeg_pix_fmt_is_yuv(src_pix)) {
+             if((width & 0x7) || (height & 0x7)) {
+                 LV_LOG_WARN("The width(%d) and height(%d) the image "
+                             "is not a multiple of 8, "
+@@ -467,15 +465,21 @@
+             }
+         }
  
++        sws_freeContext(ffmpeg_ctx->sws_ctx);
          ffmpeg_ctx->sws_ctx = sws_getContext(
-                                   width, height, ffmpeg_ctx->video_dec_ctx->pix_fmt,
+-                                  width, height, ffmpeg_ctx->video_dec_ctx->pix_fmt,
 -                                  width, height, ffmpeg_ctx->video_dst_pix_fmt,
++                                  width, height, src_pix,
 +                                  dst_w, dst_h, ffmpeg_ctx->video_dst_pix_fmt,
                                    swsFlags,
                                    NULL, NULL, NULL);
++        ffmpeg_ctx->sws_src_w = width;
++        ffmpeg_ctx->sws_src_h = height;
++        ffmpeg_ctx->sws_src_pix = src_pix;
++        ffmpeg_ctx->sws_dst_w = dst_w;
++        ffmpeg_ctx->sws_dst_h = dst_h;
      }
  
      if(!ffmpeg_ctx->has_alpha) {
@@ -61,18 +138,97 @@
          int dst_linesize = ffmpeg_ctx->video_dst_linesize[0];
          if(dst_linesize != lv_linesize) {
              LV_LOG_WARN("ffmpeg linesize = %d, but lvgl image require %d",
-@@ -530,6 +545,10 @@
+@@ -494,7 +498,6 @@
+               ffmpeg_ctx->video_dst_data,
+               ffmpeg_ctx->video_dst_linesize);
  
+-failed:
+     return ret;
+ }
+ 
+@@ -528,9 +531,44 @@
+             return ret;
+         }
+ 
++        AVFrame * out_frame = ffmpeg_ctx->frame;
++
++        /* Hardware decoders (v4l2m2m) emit DRM_PRIME (dmabuf) frames. Copy
++         * them back to a CPU-readable frame so we can sws_scale to RGB. */
++        if(ffmpeg_ctx->frame->format == AV_PIX_FMT_DRM_PRIME) {
++            AVFrame * sf = ffmpeg_ctx->sw_frame;
++            av_frame_unref(sf);
++            enum AVPixelFormat * fmts = NULL;
++            if(ffmpeg_ctx->frame->hw_frames_ctx &&
++               av_hwframe_transfer_get_formats(ffmpeg_ctx->frame->hw_frames_ctx,
++                                               AV_HWFRAME_TRANSFER_DIRECTION_FROM,
++                                               &fmts, 0) >= 0 && fmts) {
++                sf->format = fmts[0];
++                av_free(fmts);
++            }
++            else {
++                sf->format = AV_PIX_FMT_NV12;
++            }
++            sf->width = ffmpeg_ctx->frame->width;
++            sf->height = ffmpeg_ctx->frame->height;
++            if(av_frame_get_buffer(sf, 0) < 0) {
++                LV_LOG_ERROR("ffmpeg sw frame alloc failed");
++            }
++            else if(av_hwframe_transfer_data(sf, ffmpeg_ctx->frame, 0) < 0) {
++                LV_LOG_ERROR("ffmpeg hwframe transfer failed");
++                av_frame_unref(ffmpeg_ctx->frame);
++                continue;
++            }
++            out_frame = sf;
++        }
++
          /* write the frame data to output file */
          if(dec->codec->type == AVMEDIA_TYPE_VIDEO) {
+-            ret = ffmpeg_output_video_frame(ffmpeg_ctx);
 +            if(ffmpeg_ctx->frame->best_effort_timestamp != AV_NOPTS_VALUE) {
 +                ffmpeg_ctx->next_pts_us = av_rescale_q(ffmpeg_ctx->frame->best_effort_timestamp,
 +                                                        ffmpeg_ctx->tb, AV_TIME_BASE_Q);
 +            }
-             ret = ffmpeg_output_video_frame(ffmpeg_ctx);
++            ret = ffmpeg_output_video_frame(ffmpeg_ctx, out_frame);
          }
  
-@@ -691,6 +710,9 @@
+         av_frame_unref(ffmpeg_ctx->frame);
+@@ -559,6 +597,12 @@
+         LV_LOG_ERROR("Failed to allocate the %s codec context",
+                      av_get_media_type_string(type));
+         goto free_dec_ctx;
++    }
++
++    /* Skip the in-loop deblocking filter on decode for a cheap speed-up.
++     * Negligible quality impact for playback; harmless for hw decoders. */
++    if(type == AVMEDIA_TYPE_VIDEO) {
++        (*dec_ctx)->skip_loop_filter = AVDISCARD_ALL;
+     }
+ 
+     /* Init the decoders */
+@@ -595,6 +639,22 @@
+     else {
+         stream_index = ret;
+         st = fmt_ctx->streams[stream_index];
++
++        /* Prefer a hardware decoder (V4L2 M2M / Rockchip VPU) for video when
++         * one is available; fall back to the default software decoder below
++         * if the hardware decoder cannot be initialized. */
++        if(decoder_name == NULL && type == AVMEDIA_TYPE_VIDEO) {
++            const char * hwname = NULL;
++            if(st->codecpar->codec_id == AV_CODEC_ID_H264) hwname = "h264_v4l2m2m";
++            else if(st->codecpar->codec_id == AV_CODEC_ID_HEVC) hwname = "hevc_v4l2m2m";
++            if(hwname) {
++                const AVCodec * hwd = avcodec_find_decoder_by_name(hwname);
++                if(hwd && ffmpeg_init_codec_context(dec_ctx, hwd, type, st) >= 0) {
++                    LV_LOG_INFO("using hardware decoder %s", hwname);
++                    dec = hwd;
++                }
++            }
++        }
+ 
+         /* find decoder for the stream */
+         if(decoder_name) {
+@@ -691,6 +751,9 @@
  
  static int ffmpeg_get_frame_refr_period(struct ffmpeg_context_s * ffmpeg_ctx)
  {
@@ -82,23 +238,33 @@
      int avg_frame_rate_num = ffmpeg_ctx->video_stream->avg_frame_rate.num;
      if(avg_frame_rate_num > 0) {
          int period = 1000 * (int64_t)ffmpeg_ctx->video_stream->avg_frame_rate.den
-@@ -952,19 +974,141 @@
+@@ -894,6 +957,12 @@
+         return -1;
+     }
+ 
++    ffmpeg_ctx->sw_frame = av_frame_alloc();
++    if(ffmpeg_ctx->sw_frame == NULL) {
++        LV_LOG_ERROR("Could not allocate sw frame");
++        return -1;
++    }
++
+     /* allocate packet, set data to NULL, let the demuxer fill it */
+ 
+     ffmpeg_ctx->pkt = av_packet_alloc();
+@@ -931,6 +1000,7 @@
+     }
+ 
+     sws_freeContext(ffmpeg_ctx->sws_ctx);
++    av_frame_free(&ffmpeg_ctx->sw_frame);
+     ffmpeg_close_src_ctx(ffmpeg_ctx);
+     ffmpeg_close_dst_ctx(ffmpeg_ctx);
+     if(ffmpeg_ctx->io_ctx != NULL) {
+@@ -952,8 +1022,53 @@
          return;
      }
  
 -    int has_next = ffmpeg_update_next_frame(player->ffmpeg_ctx);
 -
--    if(has_next < 0) {
--        lv_ffmpeg_player_set_cmd(obj, player->auto_restart ? LV_FFMPEG_PLAYER_CMD_START : LV_FFMPEG_PLAYER_CMD_STOP);
--        if(!player->auto_restart) {
--            lv_obj_send_event((lv_obj_t *)player, LV_EVENT_READY, NULL);
--        }
--        return;
--    }
--
--    lv_image_cache_drop(lv_image_get_src(obj));
--
--    lv_obj_invalidate(obj);
 +    struct ffmpeg_context_s * c = player->ffmpeg_ctx;
 +
 +    /* Keep the YUV->RGB render buffer matched to the player object's current
@@ -140,29 +306,21 @@
 +    }
 +
 +    if(c->paused) return;
-+    int64_t elapsed_us = av_gettime_relative() - c->play_start_us - c->paused_accum_us;
 +
-+    int has_next = 0;
-+    int shown = 0;
-+    for(int i = 0; i < 16; i++) {
-+        has_next = ffmpeg_update_next_frame(c);
-+        if(has_next < 0) {
-+            lv_ffmpeg_player_set_cmd(obj, player->auto_restart ? LV_FFMPEG_PLAYER_CMD_START : LV_FFMPEG_PLAYER_CMD_STOP);
-+            if(!player->auto_restart) {
-+                lv_obj_send_event((lv_obj_t *)player, LV_EVENT_READY, NULL);
-+            }
-+            return;
-+        }
-+        shown = 1;
-+        /* drop late frames / catch up to wall-clock: stop once we reach a
-+           frame scheduled for the future */
-+        if(c->next_pts_us > elapsed_us) break;
-+    }
-+
-+    if(shown) {
-+        lv_image_cache_drop(lv_image_get_src(obj));
-+        lv_obj_invalidate(obj);
-+    }
++    /* Decode exactly one frame per refresh tick. The timer period is already
++     * set to the video frame duration, so this paces playback naturally.
++     * Decoding many frames per tick (catch-up loop) is fatal on slow soft-decode
++     * targets: each frame blocks ~100ms+, freezing the whole UI at ~0 fps. */
++    int has_next = ffmpeg_update_next_frame(c);
+     if(has_next < 0) {
+         lv_ffmpeg_player_set_cmd(obj, player->auto_restart ? LV_FFMPEG_PLAYER_CMD_START : LV_FFMPEG_PLAYER_CMD_STOP);
+         if(!player->auto_restart) {
+@@ -963,8 +1078,78 @@
+     }
+ 
+     lv_image_cache_drop(lv_image_get_src(obj));
+-
+     lv_obj_invalidate(obj);
 +}
 +
 +/* ---- additional player control API (pause / seek / time / duration) ---- */
