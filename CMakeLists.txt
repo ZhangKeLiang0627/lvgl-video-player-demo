@@ -41,7 +41,14 @@ file(GLOB APP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 add_executable(lvgl-video-player ${APP_SOURCES})
 target_include_directories(lvgl-video-player PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${FFMPEG_INCLUDE_DIRS})
+    ${FFMPEG_INCLUDE_DIRS}
+    # LVGL's own headers are reached via directory-scoped include_directories
+    # that are NOT propagated to consumers of the `lvgl` target, so we must
+    # add them explicitly. `include/lvgl` carries the public <lvgl.h>; `src`
+    # carries the internal "debugging/...", "widgets/...", "libs/..." headers
+    # that lvgl.h itself pulls in (and that App.cpp includes directly).
+    ${CMAKE_CURRENT_SOURCE_DIR}/lvgl/include/lvgl
+    ${CMAKE_CURRENT_SOURCE_DIR}/lvgl/src)
 target_link_libraries(lvgl-video-player PRIVATE
     lvgl
     ${FFMPEG_LIBRARIES}

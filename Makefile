@@ -15,11 +15,16 @@
 CC       ?= gcc
 CXX      ?= g++
 LVGL_SRC  = ../lvgl/src
+LVGL_INC  = ../lvgl/include/lvgl
 
 # C sources = all of LVGL (compiled by gcc). C++ = our modules (compiled by g++).
 # -DLV_CONF_INCLUDE_SIMPLE + -I . lets LVGL find our lv_conf.h next to the tree.
-CFLAGS    = -I $(LVGL_SRC) -I include -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall
-CXXFLAGS  = -I $(LVGL_SRC) -I include -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall -std=c++17
+# Both LVGL_SRC (internal "debugging/...", "libs/..." headers) and LVGL_INC
+# (the public <lvgl.h>) must be on the include path: LVGL's own headers are
+# reached via directory-scoped include_directories that are NOT propagated to
+# consumers of the `lvgl` target.
+CFLAGS    = -I $(LVGL_SRC) -I $(LVGL_INC) -I include -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall
+CXXFLAGS  = -I $(LVGL_SRC) -I $(LVGL_INC) -I include -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall -std=c++17
 
 LDFLAGS   = $(shell pkg-config --cflags --libs libavformat libavcodec libavutil libswscale libswresample) -lm -lpthread -lasound -pthread
 
