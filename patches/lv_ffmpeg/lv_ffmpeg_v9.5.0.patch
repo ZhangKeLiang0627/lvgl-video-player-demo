@@ -9,6 +9,15 @@
  #include <libswscale/swscale.h>
  
  /*********************
+@@ -37,7 +39,7 @@
+ 
+ #define MY_CLASS (&lv_ffmpeg_player_class)
+ 
+-#define FRAME_DEF_REFR_PERIOD   33  /*[ms]*/
++#define FRAME_DEF_REFR_PERIOD   16  /*[ms] ~60fps default refresh cadence*/
+ 
+ #define DECODER_BUFFER_SIZE (8 * 1024)
+ 
 @@ -61,8 +63,20 @@
      int video_dst_linesize[4];
      enum AVPixelFormat video_dst_pix_fmt;
@@ -228,17 +237,35 @@
  
          /* find decoder for the stream */
          if(decoder_name) {
-@@ -691,6 +751,9 @@
+@@ -691,14 +751,22 @@
  
  static int ffmpeg_get_frame_refr_period(struct ffmpeg_context_s * ffmpeg_ctx)
  {
+-    int avg_frame_rate_num = ffmpeg_ctx->video_stream->avg_frame_rate.num;
+-    if(avg_frame_rate_num > 0) {
+-        int period = 1000 * (int64_t)ffmpeg_ctx->video_stream->avg_frame_rate.den
+-                     / avg_frame_rate_num;
 +    ffmpeg_ctx->tb = ffmpeg_ctx->video_stream->time_base;
 +    ffmpeg_ctx->play_start_us = 0;
 +    ffmpeg_ctx->next_pts_us = 0;
-     int avg_frame_rate_num = ffmpeg_ctx->video_stream->avg_frame_rate.num;
-     if(avg_frame_rate_num > 0) {
-         int period = 1000 * (int64_t)ffmpeg_ctx->video_stream->avg_frame_rate.den
-@@ -894,6 +957,12 @@
++    /* Prefer the average frame rate; fall back to the real (container) frame
++     * rate when the average is unset (common with some muxers). Clamp so we
++     * never schedule faster than ~250 fps or slower than 1 fps. */
++    AVRational fr = ffmpeg_ctx->video_stream->avg_frame_rate;
++    if(fr.num <= 0 || fr.den <= 0) fr = ffmpeg_ctx->video_stream->r_frame_rate;
++    if(fr.num > 0 && fr.den > 0) {
++        int period = (int)(1000.0 * fr.den / fr.num + 0.5);
++        if(period < 4) period = 4;
++        if(period > 1000) period = 1000;
+         return period;
+     }
+ 
+-    return -1;
++    return -1;   /* caller keeps FRAME_DEF_REFR_PERIOD (60 fps) */
+ }
+ 
+ static int ffmpeg_update_next_frame(struct ffmpeg_context_s * ffmpeg_ctx)
+@@ -894,6 +962,12 @@
          return -1;
      }
  
@@ -251,7 +278,7 @@
      /* allocate packet, set data to NULL, let the demuxer fill it */
  
      ffmpeg_ctx->pkt = av_packet_alloc();
-@@ -931,6 +1000,7 @@
+@@ -931,6 +1005,7 @@
      }
  
      sws_freeContext(ffmpeg_ctx->sws_ctx);
@@ -259,7 +286,7 @@
      ffmpeg_close_src_ctx(ffmpeg_ctx);
      ffmpeg_close_dst_ctx(ffmpeg_ctx);
      if(ffmpeg_ctx->io_ctx != NULL) {
-@@ -952,8 +1022,53 @@
+@@ -952,8 +1027,53 @@
          return;
      }
  
@@ -315,7 +342,7 @@
      if(has_next < 0) {
          lv_ffmpeg_player_set_cmd(obj, player->auto_restart ? LV_FFMPEG_PLAYER_CMD_START : LV_FFMPEG_PLAYER_CMD_STOP);
          if(!player->auto_restart) {
-@@ -963,8 +1078,78 @@
+@@ -963,8 +1083,78 @@
      }
  
      lv_image_cache_drop(lv_image_get_src(obj));
