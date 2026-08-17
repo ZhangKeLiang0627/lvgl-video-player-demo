@@ -131,7 +131,7 @@ void App::run()
      * The old loop had 4+ syscalls/iteration, adding ~20ms of pure overhead and
      * capping playback at ~18fps. A pure tight loop eliminates that entirely.
      *
-     * The player timer (period=8, set in lv_ffmpeg.c) fires on every iteration,
+     * The player timer period is set by lv_ffmpeg.c to the file's real frame
      * so one decode per loop. LVGL's tick is driven by the real-time clock
      * callback installed by fbdev init (no lv_tick_inc needed). Measured frame
      * interval ≈ 28ms (~35fps) — smooth, no stutter. */
