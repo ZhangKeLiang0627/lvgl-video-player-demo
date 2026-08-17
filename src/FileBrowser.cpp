@@ -1,6 +1,7 @@
 #include "FileBrowser.h"
 #include "App.h"
 #include "config.h"
+#include "screen.h"
 
 #include <cctype>
 #include <cstring>
@@ -42,19 +43,23 @@ void FileBrowser::toggle()
 void FileBrowser::open()
 {
     if (overlay_) return;
+    /* Overlay and widgets scale with the logical screen size. */
+    const int W = g_screen.w;
+    const int H = g_screen.h;
+
     overlay_ = lv_obj_create(lv_screen_active());
-    lv_obj_set_size(overlay_, 800, 1280);
+    lv_obj_set_size(overlay_, W, H);
     lv_obj_set_style_bg_color(overlay_, lv_color_make(0, 0, 0), 0);
     lv_obj_set_style_bg_opa(overlay_, LV_OPA_90, 0);
     lv_obj_clear_flag(overlay_, LV_OBJ_FLAG_SCROLLABLE);
 
     pathLabel_ = lv_label_create(overlay_);
     lv_obj_set_style_text_color(pathLabel_, lv_color_white(), 0);
-    lv_obj_align(pathLabel_, LV_ALIGN_TOP_MID, 0, 80);
+    lv_obj_align(pathLabel_, LV_ALIGN_TOP_MID, 0, spct(H, 7));
 
     lv_obj_t * x = lv_button_create(overlay_);
-    lv_obj_set_size(x, 70, 50);
-    lv_obj_align(x, LV_ALIGN_TOP_RIGHT, -16, 16);
+    lv_obj_set_size(x, spct(W, 9), spct(H, 4));
+    lv_obj_align(x, LV_ALIGN_TOP_RIGHT, -spct(W, 2), spct(H, 13) / 10);
     lv_obj_set_style_bg_color(x, lv_color_make(0x8E, 0x24, 0x24), 0);
     lv_obj_t * xl = lv_label_create(x);
     lv_label_set_text(xl, "X");
@@ -77,10 +82,13 @@ void FileBrowser::close()
 
 void FileBrowser::render()
 {
+    const int W = g_screen.w;
+    const int H = g_screen.h;
+
     if (list_) { lv_obj_delete(list_); list_ = nullptr; }
     list_ = lv_list_create(overlay_);
-    lv_obj_set_size(list_, 740, 1010);
-    lv_obj_align(list_, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_set_size(list_, spct(W, 93), spct(H, 79));
+    lv_obj_align(list_, LV_ALIGN_BOTTOM_MID, 0, -spct(H, 16) / 10);
     lv_obj_set_user_data(list_, this);
     if (pathLabel_) lv_label_set_text(pathLabel_, curDir_.c_str());
 

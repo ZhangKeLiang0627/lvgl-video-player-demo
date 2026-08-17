@@ -26,3 +26,9 @@
 /* Software volume gain range: slider 0..100 maps to 0.0 .. VOL_MAX_GAIN. */
 #define VOL_MAX_GAIN 2.0f
 #define VOL_DEFAULT 75
+
+/* Default display rotation in degrees (0 / 90 / 180 / 270). Override at
+ * runtime with `-r <deg>` or the LVGL_ROTATE environment variable. */
+#ifndef DEFAULT_ROTATION
+  #define DEFAULT_ROTATION 0
+#endif

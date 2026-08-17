@@ -1,6 +1,7 @@
 #include "Ui.h"
 #include "App.h"
 #include "config.h"
+#include "screen.h"
 
 #include <cstdio>
 #include <cstring>
@@ -9,10 +10,16 @@ void Ui::build(lv_obj_t * screen)
 {
     screen_ = screen;
 
+    /* All sizes / offsets are percentages of the logical screen size
+     * (g_screen.w x g_screen.h, rotation-aware), so the layout stays
+     * proportional on any panel resolution / orientation. */
+    const int W = g_screen.w;
+    const int H = g_screen.h;
+
     /* top-left: play / pause toggle */
     playBtn_ = lv_button_create(screen);
-    lv_obj_set_size(playBtn_, 110, 60);
-    lv_obj_align(playBtn_, LV_ALIGN_TOP_LEFT, 20, 20);
+    lv_obj_set_size(playBtn_, spct(W, 14), spct(H, 5));
+    lv_obj_align(playBtn_, LV_ALIGN_TOP_LEFT, spct(W, 3), spct(H, 2));
     lv_obj_set_style_bg_color(playBtn_, lv_color_make(0x37, 0x6E, 0x37), 0);
     lv_obj_set_style_radius(playBtn_, 12, 0);
     playBtnLabel_ = lv_label_create(playBtn_);
@@ -22,8 +29,8 @@ void Ui::build(lv_obj_t * screen)
 
     /* top-right: open playlist / file browser */
     lv_obj_t * pl_btn = lv_button_create(screen);
-    lv_obj_set_size(pl_btn, 70, 60);
-    lv_obj_align(pl_btn, LV_ALIGN_TOP_RIGHT, -20, 20);
+    lv_obj_set_size(pl_btn, spct(W, 9), spct(H, 5));
+    lv_obj_align(pl_btn, LV_ALIGN_TOP_RIGHT, -spct(W, 3), spct(H, 2));
     lv_obj_set_style_bg_color(pl_btn, lv_color_make(0x15, 0x65, 0xC0), 0);
     lv_obj_set_style_radius(pl_btn, 12, 0);
     lv_obj_t * pl_lbl = lv_label_create(pl_btn);
@@ -41,13 +48,13 @@ void Ui::build(lv_obj_t * screen)
     lv_obj_set_style_pad_hor(titleLabel_, 14, 0);
     lv_obj_set_style_pad_ver(titleLabel_, 6, 0);
     lv_obj_set_style_radius(titleLabel_, 10, 0);
-    lv_obj_align(titleLabel_, LV_ALIGN_TOP_MID, 0, 16);
+    lv_obj_align(titleLabel_, LV_ALIGN_TOP_MID, 0, spct(H, 2));
     lv_obj_move_foreground(titleLabel_);
 
     /* bottom: progress bar, normalized 0..1000 range (avoids int32 overflow) */
     seekSlider_ = lv_slider_create(screen);
-    lv_obj_set_size(seekSlider_, 740, 14);
-    lv_obj_align(seekSlider_, LV_ALIGN_BOTTOM_MID, 0, -110);
+    lv_obj_set_size(seekSlider_, spct(W, 93), spct(H, 1));
+    lv_obj_align(seekSlider_, LV_ALIGN_BOTTOM_MID, 0, -spct(H, 9));
     lv_slider_set_range(seekSlider_, 0, 1000);
     lv_slider_set_value(seekSlider_, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(seekSlider_, lv_color_make(0x55, 0x55, 0x55), LV_PART_MAIN);
@@ -66,13 +73,13 @@ void Ui::build(lv_obj_t * screen)
     lv_obj_set_style_pad_hor(timeLabel_, 10, 0);
     lv_obj_set_style_pad_ver(timeLabel_, 4, 0);
     lv_obj_set_style_radius(timeLabel_, 8, 0);
-    lv_obj_align(timeLabel_, LV_ALIGN_BOTTOM_MID, 0, -134);
+    lv_obj_align(timeLabel_, LV_ALIGN_BOTTOM_MID, 0, -spct(H, 11));
     lv_obj_move_foreground(timeLabel_);
 
     /* bottom-center: volume slider (0..100 -> software gain 0..VOL_MAX_GAIN) */
     lv_obj_t * vol_slider = lv_slider_create(screen);
-    lv_obj_set_size(vol_slider, 360, 12);
-    lv_obj_align(vol_slider, LV_ALIGN_BOTTOM_MID, 0, -46);
+    lv_obj_set_size(vol_slider, spct(W, 45), spct(H, 1));
+    lv_obj_align(vol_slider, LV_ALIGN_BOTTOM_MID, 0, -spct(H, 4));
     lv_slider_set_range(vol_slider, 0, 100);
     lv_slider_set_value(vol_slider, VOL_DEFAULT, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(vol_slider, lv_color_make(0x15, 0x65, 0xC0), LV_PART_MAIN);
@@ -80,7 +87,7 @@ void Ui::build(lv_obj_t * screen)
     lv_obj_set_style_bg_color(vol_slider, lv_color_make(0x42, 0xA5, 0xF5), LV_PART_KNOB);
     volLabel_ = lv_label_create(screen);
     lv_label_set_text_fmt(volLabel_, "Vol %d", VOL_DEFAULT);
-    lv_obj_align_to(volLabel_, vol_slider, LV_ALIGN_OUT_TOP_MID, 0, -6);
+    lv_obj_align_to(volLabel_, vol_slider, LV_ALIGN_OUT_TOP_MID, 0, -spct(H, 1));
     lv_obj_add_event_cb(vol_slider, volSliderCb, LV_EVENT_VALUE_CHANGED, &app_);
 }
 

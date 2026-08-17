@@ -40,8 +40,8 @@ private:
     void        uiRefresh();
     static uint32_t nowMs();
 
-    /* Compute a contain-fit rectangle of (vw x vh) inside the 800x1280 screen,
-     * preserving aspect ratio (no crop, no distortion). */
+    /* Compute a contain-fit rectangle of (vw x vh) inside the logical screen
+     * (g_screen.w x g_screen.h, rotation-aware), preserving aspect ratio. */
     void fitVideo(int vw, int vh, int * rw, int * rh);
 
     /* Probe `path` for native size and resize the player widget to its

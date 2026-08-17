@@ -1,5 +1,6 @@
 #include "App.h"
 #include "config.h"
+#include "screen.h"
 #include "debugging/sysmon/lv_sysmon.h"
 
 #include <cstdio>
@@ -29,13 +30,34 @@ bool App::init()
     lv_display_t * disp = lv_linux_fbdev_create();
     lv_linux_fbdev_set_file(disp, "/dev/fb0");
 
+    /* Screen geometry: physical framebuffer size + requested rotation.
+     * g_screen.w/h become the logical resolution every UI layout uses. */
+    g_screen.phys_w = lv_display_get_horizontal_resolution(disp);
+    g_screen.phys_h = lv_display_get_vertical_resolution(disp);
+    switch (g_screen.rotation) {
+        case 90:  lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_90);  break;
+        case 180: lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_180); break;
+        case 270: lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_270); break;
+        default:  lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);   break;
+    }
+    if (g_screen.rotation == 90 || g_screen.rotation == 270) {
+        g_screen.w = g_screen.phys_h;
+        g_screen.h = g_screen.phys_w;
+    } else {
+        g_screen.w = g_screen.phys_w;
+        g_screen.h = g_screen.phys_h;
+    }
+    fprintf(stderr, "[init] fb=%dx%d rotation=%d logical=%dx%d\n",
+            g_screen.phys_w, g_screen.phys_h, g_screen.rotation,
+            g_screen.w, g_screen.h);
+
     lv_indev_t * touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, TOUCH_DEV);
     if (touch == nullptr)
         LV_LOG_WARN("evdev touch open failed: " TOUCH_DEV);
 
     lv_ffmpeg_init();
 
-    if (!player_.create(lv_screen_active(), 800, 1280)) {
+    if (!player_.create(lv_screen_active(), g_screen.w, g_screen.h)) {
         LV_LOG_WARN("lv_ffmpeg_player_create failed");
     }
 
@@ -167,7 +189,7 @@ void App::playFile(const std::string & path)
 
 void App::fitVideo(int vw, int vh, int * rw, int * rh)
 {
-    const int DW = 800, DH = 1280;
+    const int DW = g_screen.w, DH = g_screen.h;   /* logical screen size */
     if (vw <= 0 || vh <= 0) { *rw = DW; *rh = DH; return; }
     /* contain: scale so the whole video fits inside the screen, preserving
      * aspect ratio (letterbox bars show the black background, never cropped). */
@@ -190,7 +212,7 @@ void App::fitToScreen(const char * path)
         player_.resize(rw, rh);
         fprintf(stderr, "[fit] %s %dx%d -> render %dx%d\n", path, vw, vh, rw, rh);
     } else {
-        player_.resize(800, 1280);   /* unknown size: fill the screen */
+        player_.resize(g_screen.w, g_screen.h);   /* unknown size: fill the screen */
         fprintf(stderr, "[fit] %s probe failed -> full screen\n", path);
     }
 }
