@@ -20,7 +20,7 @@
 
 /* Playlist root: the file browser never navigates above this directory. */
 #ifndef ROOT_DIR
-  #define ROOT_DIR "/userdata"
+  #define ROOT_DIR "/"
 #endif
 
 /* Software volume gain range: slider 0..100 maps to 0.0 .. VOL_MAX_GAIN. */

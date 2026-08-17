@@ -5,6 +5,9 @@
 #include "debugging/sysmon/lv_sysmon.h"
 #if PLAYER_USE_SDL
     #include "drivers/sdl/lv_sdl_window.h"
+    #include "drivers/sdl/lv_sdl_mouse.h"
+    #include "drivers/sdl/lv_sdl_keyboard.h"
+    #include "drivers/sdl/lv_sdl_mousewheel.h"
 #else
     #include "display_rga.h"
     #include "drivers/evdev/lv_evdev.h"
@@ -110,8 +113,18 @@ bool App::init()
         g_touch_read_orig = lv_indev_get_read_cb(touch);
         lv_indev_set_read_cb(touch, touch_read_rotated);
     }
+#else
+    /* SDL simulator: lv_sdl_window_create() only makes the window — it does NOT
+     * install any LVGL input device in v9. The pointer (mouse) must be created
+     * explicitly, otherwise lv_sdl_mouse_handler() finds no matching indev and
+     * silently drops every click / drag. Keyboard + wheel are optional extras
+     * so the simulator behaves like a full input stack. */
+    lv_indev_t * mouse = lv_sdl_mouse_create();
+    if (mouse == nullptr)
+        LV_LOG_WARN("lv_sdl_mouse_create failed");
+    lv_sdl_mousewheel_create();
+    lv_sdl_keyboard_create();
 #endif
-    /* SDL backend: lv_sdl_window_create() installs its own mouse pointer. */
 
     lv_ffmpeg_init();
 
