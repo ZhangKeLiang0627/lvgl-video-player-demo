@@ -1,8 +1,8 @@
 diff --git a/src/libs/ffmpeg/lv_ffmpeg.c b/src/libs/ffmpeg/lv_ffmpeg.c
-index bd74fe0..38071e2 100644
+index bd74fe0..d9e61e3 100644
 --- a/src/libs/ffmpeg/lv_ffmpeg.c
 +++ b/src/libs/ffmpeg/lv_ffmpeg.c
-@@ -1,1017 +1,1532 @@
+@@ -1,1017 +1,1549 @@
 -/**
 - * @file lv_ffmpeg.c
 - *
@@ -1344,6 +1344,8 @@ index bd74fe0..38071e2 100644
 +        case LV_FFMPEG_PLAYER_CMD_START:
 +            av_seek_frame(player->ffmpeg_ctx->fmt_ctx,
 +                          0, 0, AVSEEK_FLAG_BACKWARD);
++            avformat_flush(player->ffmpeg_ctx->fmt_ctx);
++            avcodec_flush_buffers(player->ffmpeg_ctx->video_dec_ctx);
 +            player->ffmpeg_ctx->play_start_us = av_gettime_relative();
 +            player->ffmpeg_ctx->decoded_ready = 0;
 +            player->ffmpeg_ctx->presented_pts_us = -1;
@@ -1947,15 +1949,21 @@ index bd74fe0..38071e2 100644
 +             *   the real hardware path. V4L2 M2M is tried as a secondary option
 +             *   (some BSP ffmpeg builds expose it; on RK3566 it has no device
 +             *   node so it fails open and we fall through to software). */
-+            const char * candidates[2];
++            /* Rockchip VPU only. RKMPP decoders are compiled solely into
++             * Rockchip FFmpeg builds, so this is a natural platform gate:
++             * on generic desktops the probe fails and we fall through to
++             * the software decoder. Do NOT add the generic v4l2m2m wrappers:
++             * they exist on desktop distros too, but without a /dev/video
++             * node their open fails and leaves the codec context poisoned
++             * (next avcodec_send_packet -> AVERROR_INVALIDDATA -> endless
++             * auto-restart loop, observed on the Ubuntu SDL simulator). */
++            const char * candidates[1];
 +            int nc = 0;
 +            if(st->codecpar->codec_id == AV_CODEC_ID_H264) {
 +                candidates[nc++] = "h264_rkmpp";
-+                candidates[nc++] = "h264_v4l2m2m";
 +            }
 +            else if(st->codecpar->codec_id == AV_CODEC_ID_HEVC) {
 +                candidates[nc++] = "hevc_rkmpp";
-+                candidates[nc++] = "hevc_v4l2m2m";
 +            }
 +            for(int i = 0; i < nc; i++) {
 +                const AVCodec * hwd = avcodec_find_decoder_by_name(candidates[i]);
@@ -2492,7 +2500,16 @@ index bd74fe0..38071e2 100644
 +    int64_t target_us = (int64_t)ms * 1000;
 +    int vst = (c->video_stream) ? (int)c->video_stream->index : -1;
 +    int64_t ts = av_rescale_q(target_us, AV_TIME_BASE_Q, c->tb);
++    if(target_us < 0) target_us = 0;
++    if(fc->duration != AV_NOPTS_VALUE && fc->duration > 0
++       && target_us > fc->duration) target_us = fc->duration; /* clamp */
++    ts = av_rescale_q(target_us, AV_TIME_BASE_Q, c->tb);
 +    av_seek_frame(fc, vst >= 0 ? vst : -1, ts, AVSEEK_FLAG_BACKWARD);
++    /* seek leaves stale packets/state in the demuxer and decoder: flush
++     * both so the next av_read_frame / avcodec_send_packet start cleanly
++     * from the new position (avformat_flush + avcodec_flush_buffers). */
++    avformat_flush(fc);
++    avcodec_flush_buffers(c->video_dec_ctx);
 +    /* re-anchor wall clock so get_time() returns ms */
 +    c->play_start_us = av_gettime_relative() - target_us - c->paused_accum_us;
 +    /* re-anchor the pacer as well: present_due_us must track the new position,
