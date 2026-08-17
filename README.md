@@ -27,28 +27,28 @@
 
 **可选 — RKMPP 硬件解码**：系统自带的 FFmpeg 通常没有 `h264_rkmpp` 硬解器，
 需要 Rockchip 定制版 FFmpeg。`docs/ffmpeg-rkmp/ffmpeg-rkmp-4.2.4-arm64-debs.tar.gz`
-已内置全部 deb（也可从仓库 Release 页面下载）。解包到任意目录（本仓库以
-`/opt/ffmpeg-rk` 为例）：
+已内置全部 deb（也可从仓库 Release 页面下载）。解包到独立前缀目录
+`/opt/ffmpeg-rkmp`（勿解包到系统 `/`，会覆盖系统 FFmpeg）：
 
 ```sh
-mkdir -p /opt/ffmpeg-rk /tmp/ffrk && tar xzf docs/ffmpeg-rkmp/ffmpeg-rkmp-4.2.4-arm64-debs.tar.gz -C /tmp/ffrk
-cd /tmp/ffrk && for d in *.deb; do dpkg-deb -x "$d" /opt/ffmpeg-rk; done
+mkdir -p /opt/ffmpeg-rkmp /tmp/ffrk && tar xzf docs/ffmpeg-rkmp/ffmpeg-rkmp-4.2.4-arm64-debs.tar.gz -C /tmp/ffrk
+cd /tmp/ffrk && for d in *.deb; do dpkg-deb -x "$d" /opt/ffmpeg-rkmp; done
 ```
 
-检查：`ls /opt/ffmpeg-rk/usr/lib/aarch64-linux-gnu/pkgconfig/` 能看到
+检查：`ls /opt/ffmpeg-rkmp/usr/lib/aarch64-linux-gnu/pkgconfig/` 能看到
 `libavcodec.pc` 等文件；`ffmpeg -decoders | grep rkmpp` 能看到 `h264_rkmpp`。
 
-## 构建（CMake，推荐）
+## 构建（CMake）
 
 ```sh
 git clone --recurse-submodules https://github.com/ZhangKeLiang0627/lvgl-video-player
 cd lvgl-video-player
 
-# 软解（系统 FFmpeg）
+# 软解（系统 FFmpeg，通用板子）
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
-# 硬解（Rockchip FFmpeg）—— 二选一
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFFMPEG_PREFIX=/opt/ffmpeg-rk
+# 硬解（Rockchip FFmpeg + RKMPP）
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFFMPEG_PREFIX=/opt/ffmpeg-rkmp
 
 cmake --build build -j
 ./build/lvgl-video-player
@@ -57,17 +57,11 @@ cmake --build build -j
 CMake 在 configure 阶段会自动给 LVGL 的 `lv_ffmpeg.c` 打补丁
 （RGA 加速 + 暂停 / 进度 / 时长支持），无需手动操作。
 
-## 备选 — Makefile（板子本地，已在 RK3566 验证）
-
-```sh
-# LVGL 源码树与仓库同级（如 /home/cat/lvgl），先打补丁
-cd /home/cat/lvgl
-git apply -p1 /home/cat/lvgl_video_player/patches/lv_ffmpeg/lv_ffmpeg_v9.5.0.patch
-
-cd /home/cat/lvgl_video_player
-make FFMPEG_PREFIX=/opt/ffmpeg-rk   # 软解可省略 FFMPEG_PREFIX
-./demo
-```
+> **软解 / 硬解是自动区分的**：同一份二进制在运行时优先探测
+> `h264_rkmpp` / `hevc_rkmpp` 硬解器，找不到则回退系统软解；像素转换
+> 优先用 Rockchip RGA 2D 加速，RGA 不可用（如非 Rockchip 板子）时自动
+> 回退 CPU `sws_scale`。因此「硬解」构建产物（`-DFFMPEG_PREFIX=...`）在
+> 普通板子上也能跑（走软解），不会报错。
 
 ## 配置
 
