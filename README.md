@@ -1,4 +1,4 @@
-# LVGL Video Player
+# LVGL Video Player Demo
 
 基于 LVGL 的嵌入式 Linux 帧缓冲视频播放器（C++）：FFmpeg 解码 → 屏幕显示 + ALSA 音频，
 支持音画同步、播放/暂停、可拖动进度条、音量调节和文件浏览器。
