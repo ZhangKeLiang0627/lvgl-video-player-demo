@@ -1,11 +1,13 @@
 # LVGL Video Player
 
 基于 LVGL 的嵌入式 Linux 视频播放器（C++）：FFmpeg 解码 → LVGL 上屏 + ALSA 音频。
-支持硬解加速、音画同步、播放/暂停/进度、文件浏览器、旋转角与任意分辨率自适应、
-运行时截图。RK3566 @ 1080p 实测 ~36fps。
+支持硬解加速（RKMPP）、帧时钟锁帧（23.976/24/25/30fps 播放节奏稳定不抖）、
+音画同步、播放/暂停/进度拖拽、文件浏览器、旋转角与任意分辨率自适应、运行时截图。
+RK3566 @ 1080p 实测 ~36fps。
 
 > A C++ LVGL video player for embedded Linux framebuffers: FFmpeg decode to
-> screen + ALSA audio, with A/V sync, play/pause/seek, rotation, a file
+> screen + ALSA audio, with A/V sync, frame-clock paced playback (stable
+> cadence for 23.976/24/25/30 fps), play/pause/seek, rotation, a file
 > browser playlist and one-click screenshots.
 
 ## 快速上手：编译与运行
@@ -77,9 +79,14 @@ flowchart LR
     I --> J["LVGL 合成 → /dev/fb0"]
 ```
 
-- **解码**：优先 `h264_rkmpp`/`hevc_rkmpp` 硬解，找不到自动回退软解
+- **解码**：优先 `h264_rkmpp`/`hevc_rkmpp` 硬解，找不到自动回退软解。
+  （不尝试 `v4l2m2m`：桌面发行版带这些 wrapper 但无 `/dev/video` 节点，open 失败
+  会污染解码器状态、导致播放反复重启卡死——见 `patches/lv_ffmpeg/README.md`。）
 - **转换**：优先 RGA 2D 硬件，不可用（通用板）自动回退 CPU `sws_scale`
-- 同一份二进制在普通板子上运行自动走软解，不会报错
+- **呈现节奏**：帧时钟锁帧——解码一帧超前、到帧边界才上屏，上屏节奏与解码耗时
+  解耦，23.976fps 等片源不再因解码抖动而一顿一顿
+- 同一份二进制在普通板子上运行自动走软解，不会报错；`-DENABLE_SDL=ON` 可在 PC
+  桌面仿真（行为与真机一致：锁帧、换片源、进度条拖拽均正常）
 
 ## 预览
 
@@ -155,8 +162,11 @@ cd /tmp/ffrk && for d in *.deb; do dpkg-deb -x "$d" /opt/ffmpeg-rkmp; done
 
 ## 已知限制
 
-- RK3566 主循环为无 syscall 紧凑轮询，视频 ~36fps（略快于 30fps），kiosk 场景可接受
+- RK3566 主循环为无 syscall 紧凑轮询；视频呈现按片源帧时钟锁帧（每帧在上屏边界
+  精确上屏），解码耗时波动不再影响播放节奏。23.976fps 片源在 59.37Hz 面板上仍有
+  物理 3:2 重复模式（帧率与刷新率非整数倍），抖动已均匀化、无法完全消除
 - `lv_ffmpeg` 补丁针对 LVGL v9.5.0，升级 LVGL 需重新评估
+- 桌面 SDL 仿真为软解（无 RKMPP/RGA），适合验证 UI 与交互，解码性能不代表真机
 
 ## License
 
