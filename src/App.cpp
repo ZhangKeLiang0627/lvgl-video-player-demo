@@ -1,6 +1,7 @@
 #include "App.h"
 #include "config.h"
 #include "screen.h"
+#include "utils/lv_snapshot.h"
 #include "debugging/sysmon/lv_sysmon.h"
 
 #include <cstdio>
@@ -220,4 +221,41 @@ void App::fitToScreen(const char * path)
 void App::toggleBrowser()
 {
     browser_.toggle();
+}
+
+void App::startSnapshot(const std::string & dir, int periodSec)
+{
+    shotDir_ = dir;
+    int period = periodSec > 0 ? periodSec : 5;
+    lv_timer_t * t = lv_timer_create(snapshotTimerCb, (uint32_t)period * 1000, this);
+    lv_timer_set_repeat_count(t, -1);   /* fire forever */
+    fprintf(stderr, "[snapshot] periodic: %s every %ds\n", dir.c_str(), period);
+}
+
+void App::takeSnapshotOnce(const std::string & path)
+{
+    shotOncePath_ = path;
+    lv_timer_t * t = lv_timer_create(snapshotTimerCb, 2000, this);   /* let UI settle */
+    lv_timer_set_repeat_count(t, 1);
+    fprintf(stderr, "[snapshot] one-shot: %s (after 2s)\n", path.c_str());
+}
+
+void App::snapshotTimerCb(lv_timer_t * t)
+{
+    App * a = (App *)lv_timer_get_user_data(t);
+    if (a) a->snapshotTick();
+}
+
+void App::snapshotTick()
+{
+    lv_obj_t * target = screen_ ? screen_ : lv_screen_active();
+    if (!shotDir_.empty()) {
+        char path[256];
+        snprintf(path, sizeof(path), "%s/shot_%03d.png", shotDir_.c_str(), shotSeq_++);
+        lv_snapshot_save_png(target, path);
+    }
+    if (!shotOncePath_.empty()) {
+        lv_snapshot_save_png(target, shotOncePath_.c_str());
+        shotOncePath_.clear();
+    }
 }

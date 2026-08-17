@@ -30,6 +30,12 @@ public:
     void playFile(const std::string & path);
     void toggleBrowser();
 
+    /* Screen capture (utils/lv_snapshot):
+     *   startSnapshot(dir, sec)  - save <dir>/shot_000.png every `sec` seconds
+     *   takeSnapshotOnce(path)   - save one shot after the UI settles (~2 s) */
+    void startSnapshot(const std::string & dir, int periodSec);
+    void takeSnapshotOnce(const std::string & path);
+
     Player      & player()  { return player_;  }
     AudioEngine & audio()   { return audio_;   }
     Ui          & ui()      { return ui_;      }
@@ -39,6 +45,9 @@ private:
     static void uiRefreshCb(lv_timer_t * t);
     void        uiRefresh();
     static uint32_t nowMs();
+
+    static void snapshotTimerCb(lv_timer_t * t);
+    void        snapshotTick();
 
     /* Compute a contain-fit rectangle of (vw x vh) inside the logical screen
      * (g_screen.w x g_screen.h, rotation-aware), preserving aspect ratio. */
@@ -57,4 +66,9 @@ private:
     int       userSeeking_     = 0;
     int32_t    seekSettleUntil_ = 0;   /* ignore bar override until this ms */
     bool      playing_          = true;
+
+    /* Screen-capture state. */
+    std::string shotDir_;
+    std::string shotOncePath_;
+    int         shotSeq_ = 0;
 };

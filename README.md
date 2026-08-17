@@ -1,4 +1,4 @@
-# LVGL Video Player Demo
+# LVGL Video Player
 
 基于 LVGL 的嵌入式 Linux 帧缓冲视频播放器（C++）：FFmpeg 解码 → 屏幕显示 + ALSA 音频，
 支持音画同步、播放/暂停、可拖动进度条、音量调节和文件浏览器。
@@ -14,6 +14,18 @@
 - 进程内 ALSA 音频线程，音画同属一个墙钟（A/V 同步）
 - 播放 / 暂停、可拖动进度条、音量滑块、文件浏览器 / 播放列表
 - LVGL sysmon 帧率 / 内存监视器
+- **分辨率自适应 + 启动旋转角**：任意面板分辨率 + `-r 0/90/180/270`，
+  控件全部按屏宽高百分比布局
+- **运行时截屏工具**（`utils/lv_snapshot`）：导出 PNG 用于 README 预览 / 调试
+
+## 预览
+
+| 竖屏 0°（800×1280 默认） | 横屏 90°（1280×800 旋转） |
+| :---: | :---: |
+| ![portrait](docs/screenshots/portrait.png) | ![landscape](docs/screenshots/landscape.png) |
+| `./demo` | `./demo -r 90` |
+
+两张截图都由 `utils/lv_snapshot` 在 RK3566 真机上抓取（视频帧正在播放）。
 
 ## 视频输出链路
 
@@ -75,7 +87,7 @@ flowchart LR
 
 **可选 — RKMPP 硬件解码**：系统自带的 FFmpeg 通常没有 `h264_rkmpp` 硬解器，
 需要 Rockchip 定制版 FFmpeg。`docs/ffmpeg-rkmp/ffmpeg-rkmp-4.2.4-arm64-debs.tar.gz`
-已内置全部 deb。解包到独立前缀目录
+已内置全部 deb（也可从仓库 Release 页面下载）。解包到独立前缀目录
 `/opt/ffmpeg-rkmp`（勿解包到系统 `/`，会覆盖系统 FFmpeg）：
 
 ```sh
@@ -122,6 +134,27 @@ CMake 在 configure 阶段会自动给 LVGL 的 `lv_ffmpeg.c` 打补丁
 | `AUDIO_DEV` | `plughw:0,0` | ALSA 播放设备 |
 | `ROOT_DIR` | `/userdata` | 文件浏览器根目录 |
 | `VOL_MAX_GAIN` | `2.0f` | 音量滑块最大增益 |
+
+## 运行与截屏
+
+```sh
+./build/lvgl-video-player                        # 竖屏（默认）
+./build/lvgl-video-player -r 90                  # 横屏
+./build/lvgl-video-player --shot /tmp/ui.png     # 启动 2s 后截一张到 PNG
+./build/lvgl-video-player --shot-dir /tmp/shots --shot-period 3
+                                                  # 每 3s 截一张到 /tmp/shots/shot_NNN.png
+```
+
+`--shot` / `--shot-dir` 由 `utils/lv_snapshot` 提供：`lv_snapshot_take()`
+抓取当前屏快照为 RGB888 帧，再用手写 zlib 编码器生成真彩色 PNG（仅依赖
+`libz`，不引入 libpng）。也可在代码里直接调用：
+
+```cpp
+#include "utils/lv_snapshot.h"
+lv_snapshot_save_png(lv_screen_active(), "/tmp/ui.png");
+```
+
+环境变量 `LVGL_ROTATE=270` 也可设置默认旋转角（与 `-r` 等价）。
 
 ## 已知限制
 

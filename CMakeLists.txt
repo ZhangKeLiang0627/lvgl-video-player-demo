@@ -51,7 +51,10 @@ find_path(RGA_INCLUDE_DIR rga/rga.h)
 find_library(RGA_LIB rga REQUIRED)
 
 # ---- Our application --------------------------------------------------------
-file(GLOB APP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
+# src/utils/*.cpp carries the lv_snapshot screen-capture tool.
+file(GLOB APP_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/*.cpp)
 add_executable(lvgl-video-player ${APP_SOURCES})
 
 # The Rockchip FFmpeg .pc files are dpkg-packed with prefix=/usr, so they
@@ -81,5 +84,6 @@ target_link_libraries(lvgl-video-player PRIVATE
     ${FFMPEG_LIBRARIES}
     ${ALSA_LIB}
     ${RGA_LIB}
+    z          # PNG encoder for utils/lv_snapshot.cpp
     pthread)
 target_compile_options(lvgl-video-player PRIVATE ${FFMPEG_CFLAGS_OTHER})

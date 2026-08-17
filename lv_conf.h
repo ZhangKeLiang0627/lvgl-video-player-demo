@@ -38,6 +38,11 @@
 /* ===== input: touchscreen via evdev ===== */
 #define LV_USE_EVDEV        1
 
+/* ===== screen capture: utils/lv_snapshot (PNG export) =====
+ * Needed by lv_snapshot_take() so we can grab the current screen/object
+ * rendering and write it to a PNG file (--shot / --shot-dir options). */
+#define LV_USE_SNAPSHOT     1
+
 /* ===== memory / refresh =====
  * LV_MEM_SIZE MUST be large enough for the full-frame display buffer
  * (w*h*bpp = 800*1280*4 ~= 4 MB) plus LVGL objects, or lv_display_set_buffers
