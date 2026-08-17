@@ -17,15 +17,20 @@
 - **分辨率自适应 + 启动旋转角**：任意面板分辨率 + `-r 0/90/180/270`，
   控件全部按屏宽高百分比布局
 - **运行时截屏工具**（`utils/lv_snapshot`）：导出 PNG 用于 README 预览 / 调试
+- **桌面 SDL 仿真**（`-DENABLE_SDL=ON`，默认 1280×800）：PC 上免真机预览
+  UI，鼠标模拟触摸，非 Rockchip 平台自动关 RGA 走 CPU 软解
+- **aarch64 交叉编译**：`cmake/aarch64-linux-gnu.cmake` toolchain 文件
 
 ## 预览
 
-| 竖屏 0°（800×1280 默认） | 横屏 90°（1280×800 旋转） |
-| :---: | :---: |
-| ![portrait](docs/screenshots/portrait.png) | ![landscape](docs/screenshots/landscape.png) |
-| `./demo` | `./demo -r 90` |
+| 竖屏 0°（800×1280 默认） | 横屏 90°（1280×800 旋转） | SDL 桌面仿真（1280×800） |
+| :---: | :---: | :---: |
+| ![portrait](docs/screenshots/portrait.png) | ![landscape](docs/screenshots/landscape.png) | ![sdl-sim](docs/screenshots/sdl_sim.png) |
+| `./demo` | `./demo -r 90` | `cmake -DENABLE_SDL=ON` 在 PC 运行 |
 
-两张截图都由 `utils/lv_snapshot` 在 RK3566 真机上抓取（视频帧正在播放）。
+前两张由 `utils/lv_snapshot` 在 RK3566 真机上抓取（视频帧正在播放）；第三张
+来自 x86_64 桌面仿真（SDL 窗口 + 软件解码），三张都显示同一套 spct 百分比
+布局。
 
 ## 视频输出链路
 
@@ -84,6 +89,7 @@ flowchart LR
 | librga | RGA 2D 加速（YUV→RGB） | Rockchip 镜像自带；否则 `sudo apt install librga-dev` | `ls /usr/include/rga/rga.h` 存在 |
 | ALSA 开发包 | 音频输出 | `sudo apt install libasound2-dev` | `ls /usr/include/alsa/asoundlib.h` 存在 |
 | zlib | 截屏工具 PNG 编码（utils/lv_snapshot） | Ubuntu 自带（`libz`）；否则 `sudo apt install zlib1g-dev` | `ls /usr/include/zlib.h` 存在 |
+| libsdl2-dev（可选） | 桌面 SDL 仿真（`-DENABLE_SDL=ON`） | `sudo apt install libsdl2-dev` | `pkg-config --modversion sdl2` 输出版本号 |
 | 构建工具 | 编译 | `sudo apt install cmake g++ pkg-config git` | `cmake --version` 输出版本号 |
 
 **可选 — RKMPP 硬件解码**：系统自带的 FFmpeg 通常没有 `h264_rkmpp` 硬解器，
@@ -98,6 +104,29 @@ cd /tmp/ffrk && for d in *.deb; do dpkg-deb -x "$d" /opt/ffmpeg-rkmp; done
 
 检查：`ls /opt/ffmpeg-rkmp/usr/lib/aarch64-linux-gnu/pkgconfig/` 能看到
 `libavcodec.pc` 等文件；`ffmpeg -decoders | grep rkmpp` 能看到 `h264_rkmpp`。
+
+## 目录结构
+
+```text
+lvgl-video-player/
+├── src/                        # 全部源码与头文件（无独立 include/ 目录）
+│   ├── App.*   Ui.*   Player.*
+│   ├── AudioEngine.*  FileBrowser.*
+│   ├── screen.*                # 运行时屏幕几何 + spct() 百分比布局 helper
+│   ├── config.h                # 编译期配置（头文件与源码同目录）
+│   ├── main.cpp
+│   └── utils/
+│       └── lv_snapshot.*       # 截屏工具：抓取 LVGL 快照 → PNG（zlib）
+├── lv_conf.h                   # LVGL 配置（构建自动引用）
+├── cmake/
+│   └── aarch64-linux-gnu.cmake # aarch64 交叉编译 toolchain
+├── patches/lv_ffmpeg/          # lv_ffmpeg.c 补丁（RGA 加速、暂停/seek 等）
+├── docs/                       # README 截图、RKMPP FFmpeg deb 包
+├── CMakeLists.txt              # 主构建（-DENABLE_SDL / -DFFMPEG_PREFIX）
+└── Makefile                    # 板载构建（可选，RK3566 实测）
+```
+
+`lvgl/` 为 git submodule（v9.5.0，构建时自动打补丁）。
 
 ## 构建（CMake）
 
@@ -115,6 +144,42 @@ cmake --build build -j
 ./build/lvgl-video-player
 ```
 
+### 桌面 SDL 仿真（PC 上预览 UI，默认 1280×800）
+
+无需真机即可运行：`-DENABLE_SDL=ON` 启用 LVGL 的 SDL 窗口后端（1280×800），
+用鼠标模拟触摸。PC 上没有 librga 时会自动关闭 RGA、走 CPU `sws_scale`
+（`lv_ffmpeg.c` 的 RGA 代码已用 `LV_FFMPEG_USE_RGA` 条件编译隔离）。
+
+```sh
+sudo apt install -y libsdl2-dev libavformat-dev libavcodec-dev \
+    libavutil-dev libswscale-dev libswresample-dev libasound2-dev zlib1g-dev
+
+cmake -S . -B build/sdl -DCMAKE_BUILD_TYPE=Release -DENABLE_SDL=ON
+cmake --build build/sdl -j"$(nproc)"
+
+PLAYER_VIDEO=/path/to/video.mp4 ./build/sdl/lvgl-video-player   # 指定播放文件
+./build/sdl/lvgl-video-player -r 90                             # 窗口内旋转预览
+```
+
+`PLAYER_VIDEO` 环境变量可覆盖默认视频路径（真机默认 `/tmp/l1080_long.mp4`，
+PC 上没有该文件时用它可以指定本地视频）。
+
+### 交叉编译（aarch64，如 RK35xx 板子）
+
+```sh
+sudo apt install -y g++-aarch64-linux-gnu
+
+cmake -S . -B build/arm64 \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake \
+    -DCMAKE_BUILD_TYPE=Release
+cmake --build build/arm64 -j"$(nproc)"
+```
+
+toolchain 文件见 `cmake/aarch64-linux-gnu.cmake`（参考
+[Keyboard-Guide](https://github.com/ZhangKeLiang0627/Keyboard-Guide) 的规范）。
+注意交叉编译需自行准备 aarch64 的 FFmpeg/ALSA dev 包（sysroot），或用
+`-DFFMPEG_PREFIX` 指向设备侧的 Rockchip FFmpeg 前缀目录。
+
 CMake 在 configure 阶段会自动给 LVGL 的 `lv_ffmpeg.c` 打补丁
 （RGA 加速 + 暂停 / 进度 / 时长支持），无需手动操作。
 
@@ -126,7 +191,7 @@ CMake 在 configure 阶段会自动给 LVGL 的 `lv_ffmpeg.c` 打补丁
 
 ## 配置
 
-编辑 `include/config.h` 或用编译宏覆盖：
+编辑 `src/config.h`（头文件与源码同目录）或用编译宏覆盖：
 
 | 宏 | 默认值 | 说明 |
 |----|--------|------|
@@ -166,6 +231,7 @@ LVGL_ROTATE=180 ./build/lvgl-video-player          # 环境变量方式
 | `-r <deg>` / `--rotate <deg>` | 旋转角 0/90/180/270（默认 `DEFAULT_ROTATION`） |
 | `--shot <file>` | 启动 2s 后截一张屏到 PNG（README 预览图即由此生成） |
 | `--shot-dir <dir> [--shot-period <sec>]` | 周期性截屏到 `<dir>/shot_NNN.png`（默认每 5s） |
+| `PLAYER_VIDEO=<path>` | 环境变量覆盖默认播放文件（SDL 仿真必备） |
 | `LVGL_ROTATE=<deg>` | 环境变量设置旋转角，等价于 `-r` |
 
 截屏由 `utils/lv_snapshot` 提供：`lv_snapshot_take()` 抓取当前屏快照为
