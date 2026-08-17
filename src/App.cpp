@@ -24,16 +24,30 @@
  * coordinates so LVGL sees logical (post-rotation) points. Mapping derived
  * empirically from RGA imrotate() corner markers on this panel. */
 static lv_indev_read_cb_t g_touch_read_orig = nullptr;
+
+/* Touch panel (goodix-ts) native PORTRAIT resolution: X = short axis 800,
+ * Y = long axis 1280. LVGL's evdev driver only sees ABS_X/ABS_Y (0/0 on
+ * this multitouch panel) and would otherwise clamp Y to the logical height.
+ * We feed the true range via lv_evdev_set_calibration() so it scales. */
+static const int RAW_W = 800;
+static const int RAW_H = 1280;
+
 static void touch_read_rotated(lv_indev_t * indev, lv_indev_data_t * data)
 {
     if (g_touch_read_orig) g_touch_read_orig(indev, data);
     int ang = g_screen.rotation;
     if (ang == 0) return;
     lv_point_t p = data->point;
-    int lw = g_screen.w, lh = g_screen.h;
-    if (ang == 90)       data->point = { p.y,           lh - 1 - p.x };
-    else if (ang == 180) data->point = { lw - 1 - p.x, lh - 1 - p.y };
-    else if (ang == 270) data->point = { lw - 1 - p.y, p.x };
+    int W = g_screen.w, H = g_screen.h;
+    /* Recover the RAW panel coordinates from LVGL's scaled output.
+     * g_touch_read_orig maps raw_x[0,RAW_W] -> [0,W-1],
+     *                   raw_y[0,RAW_H] -> [0,H-1]. */
+    int rx = p.x * RAW_W / (W > 1 ? W - 1 : 1);
+    int ry = p.y * RAW_H / (H > 1 ? H - 1 : 1);
+    /* Inverse of the RGA present rotation (matches imrotate direction). */
+    if (ang == 90)       data->point = { ry,            (H - 1) - rx };
+    else if (ang == 180) data->point = { (W - 1) - rx, (H - 1) - ry };
+    else /* 270 */       data->point = { (W - 1) - ry, rx };
 }
 
 App::App() : browser_(*this, ROOT_DIR), ui_(*this)
@@ -84,9 +98,13 @@ bool App::init()
 
 #if !PLAYER_USE_SDL
     lv_indev_t * touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, TOUCH_DEV);
-    if (touch == nullptr)
+    if (touch == nullptr) {
         LV_LOG_WARN("evdev touch open failed: " TOUCH_DEV);
+    }
     else {
+        /* True native touch resolution so LVGL scales instead of clamping
+         * the long Y axis (ABS_X/ABS_Y are 0/0 on this multitouch panel). */
+        lv_evdev_set_calibration(touch, 0, 0, RAW_W, RAW_H);
         /* Rotate touch coords to match the RGA-presented (rotated) frame so
          * taps land where the user sees them. */
         g_touch_read_orig = lv_indev_get_read_cb(touch);
