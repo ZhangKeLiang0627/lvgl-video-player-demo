@@ -26,10 +26,13 @@
 | 构建工具 | 编译 | `sudo apt install cmake g++ pkg-config git` | `cmake --version` 输出版本号 |
 
 **可选 — RKMPP 硬件解码**：系统自带的 FFmpeg 通常没有 `h264_rkmpp` 硬解器，
-需要 Rockchip 定制版 FFmpeg。把 `.deb` 解包到任意目录（本仓库以 `/opt/ffmpeg-rk` 为例）：
+需要 Rockchip 定制版 FFmpeg。`docs/ffmpeg-rkmp/ffmpeg-rkmp-4.2.4-arm64-debs.tar.gz`
+已内置全部 deb（也可从仓库 Release 页面下载）。解包到任意目录（本仓库以
+`/opt/ffmpeg-rk` 为例）：
 
 ```sh
-sudo dpkg-deb -x rockchip-ffmpeg*.deb /opt/ffmpeg-rk
+mkdir -p /opt/ffmpeg-rk /tmp/ffrk && tar xzf docs/ffmpeg-rkmp/ffmpeg-rkmp-4.2.4-arm64-debs.tar.gz -C /tmp/ffrk
+cd /tmp/ffrk && for d in *.deb; do dpkg-deb -x "$d" /opt/ffmpeg-rk; done
 ```
 
 检查：`ls /opt/ffmpeg-rk/usr/lib/aarch64-linux-gnu/pkgconfig/` 能看到
