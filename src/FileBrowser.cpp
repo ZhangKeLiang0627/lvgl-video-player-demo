@@ -99,7 +99,7 @@ void FileBrowser::render()
     /* ".. up" entry (hidden at the root). */
     if (curDir_ != root_) {
         lv_obj_t * b = lv_list_add_button(list_, (const void *)LV_SYMBOL_LEFT,
-                                          ".. (上级目录)");
+                                          ".. (up)");
         lv_obj_set_user_data(b, (void *)(intptr_t)-1);
         lv_obj_add_event_cb(b, itemCb, LV_EVENT_CLICKED, this);
     }
