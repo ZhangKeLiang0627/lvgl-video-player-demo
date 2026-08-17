@@ -1,8 +1,8 @@
 diff --git a/src/libs/ffmpeg/lv_ffmpeg.c b/src/libs/ffmpeg/lv_ffmpeg.c
-index bd74fe0..df30678 100644
+index bd74fe0..38071e2 100644
 --- a/src/libs/ffmpeg/lv_ffmpeg.c
 +++ b/src/libs/ffmpeg/lv_ffmpeg.c
-@@ -1,1017 +1,1529 @@
+@@ -1,1017 +1,1532 @@
 -/**
 - * @file lv_ffmpeg.c
 - *
@@ -1348,6 +1348,9 @@ index bd74fe0..df30678 100644
 +            player->ffmpeg_ctx->decoded_ready = 0;
 +            player->ffmpeg_ctx->presented_pts_us = -1;
 +            player->ffmpeg_ctx->present_due_us = 0;
++            player->ffmpeg_ctx->paused_accum_us = 0;  /* clear stale pause time on (re)start */
++            player->ffmpeg_ctx->pause_start_us = 0;
++            player->ffmpeg_ctx->paused = false;
 +            lv_timer_resume(timer);
 +            LV_LOG_INFO("ffmpeg player start");
 +            break;
