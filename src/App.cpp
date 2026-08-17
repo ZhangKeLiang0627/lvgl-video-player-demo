@@ -6,7 +6,7 @@
 #if PLAYER_USE_SDL
     #include "drivers/sdl/lv_sdl_window.h"
 #else
-    #include "drivers/display/fb/lv_linux_fbdev.h"
+    #include "display_rga.h"
     #include "drivers/evdev/lv_evdev.h"
 #endif
 
@@ -19,6 +19,22 @@
 #include <iomanip>
 #include <thread>
 #include <algorithm>
+
+/* Touch read wrapper: applies the inverse of the RGA rotation to raw panel
+ * coordinates so LVGL sees logical (post-rotation) points. Mapping derived
+ * empirically from RGA imrotate() corner markers on this panel. */
+static lv_indev_read_cb_t g_touch_read_orig = nullptr;
+static void touch_read_rotated(lv_indev_t * indev, lv_indev_data_t * data)
+{
+    if (g_touch_read_orig) g_touch_read_orig(indev, data);
+    int ang = g_screen.rotation;
+    if (ang == 0) return;
+    lv_point_t p = data->point;
+    int lw = g_screen.w, lh = g_screen.h;
+    if (ang == 90)       data->point = { p.y,           lh - 1 - p.x };
+    else if (ang == 180) data->point = { lw - 1 - p.x, lh - 1 - p.y };
+    else if (ang == 270) data->point = { lw - 1 - p.y, p.x };
+}
 
 App::App() : browser_(*this, ROOT_DIR), ui_(*this)
 {
@@ -43,21 +59,18 @@ bool App::init()
      * PLAYER_USE_SDL (defined by CMake; 0 on the device Makefile build). */
 #if PLAYER_USE_SDL
     lv_display_t * disp = lv_sdl_window_create(1280, 800);
+    g_screen.phys_w = 1280;
+    g_screen.phys_h = 800;
 #else
-    lv_display_t * disp = lv_linux_fbdev_create();
-    lv_linux_fbdev_set_file(disp, "/dev/fb0");
+    /* Custom RGA-backed framebuffer: LVGL renders at the logical (post-
+     * rotation) size with rotation=0 (cheap memcpy flush); the driver rotates
+     * the composited frame with the Rockchip RGA 2D unit when presenting to
+     * /dev/fb0. This avoids LVGL's CPU transpose that made landscape ~1-2 fps. */
+    lv_display_t * disp __attribute__((unused)) = disp_rga_create("/dev/fb0", g_screen.rotation);
+    disp_rga_get_phys_size(&g_screen.phys_w, &g_screen.phys_h);
 #endif
 
-    /* Screen geometry: physical framebuffer size + requested rotation.
-     * g_screen.w/h become the logical resolution every UI layout uses. */
-    g_screen.phys_w = lv_display_get_horizontal_resolution(disp);
-    g_screen.phys_h = lv_display_get_vertical_resolution(disp);
-    switch (g_screen.rotation) {
-        case 90:  lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_90);  break;
-        case 180: lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_180); break;
-        case 270: lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_270); break;
-        default:  lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);   break;
-    }
+    /* Logical (post-rotation) resolution used by every UI layout. */
     if (g_screen.rotation == 90 || g_screen.rotation == 270) {
         g_screen.w = g_screen.phys_h;
         g_screen.h = g_screen.phys_w;
@@ -73,6 +86,12 @@ bool App::init()
     lv_indev_t * touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, TOUCH_DEV);
     if (touch == nullptr)
         LV_LOG_WARN("evdev touch open failed: " TOUCH_DEV);
+    else {
+        /* Rotate touch coords to match the RGA-presented (rotated) frame so
+         * taps land where the user sees them. */
+        g_touch_read_orig = lv_indev_get_read_cb(touch);
+        lv_indev_set_read_cb(touch, touch_read_rotated);
+    }
 #endif
     /* SDL backend: lv_sdl_window_create() installs its own mouse pointer. */
 
