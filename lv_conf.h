@@ -19,6 +19,10 @@
 
 /* ===== display backend: Linux framebuffer (/dev/fb0) ===== */
 #define LV_USE_LINUX_FBDEV  1
+/* Enlarge the fbdev draw buffer to full screen height. LVGL's default is 60
+ * scanlines, which forces an 800x450 video to composite in ~8 partial bands
+ * (~20 ms of redundant re-renders/frame). 1280 = full height -> 1 band. */
+#define LV_LINUX_FBDEV_BUFFER_SIZE   1280
 
 /* ===== video playback: LVGL official ffmpeg soft decode ===== */
 #define LV_USE_FFMPEG       1
@@ -28,8 +32,8 @@
 /* ===== system monitors: FPS/CPU + memory ===== */
 #define LV_USE_OBSERVER     1          /* sysmon depends on observer */
 #define LV_USE_SYSMON       1
-#define LV_USE_PERF_MONITOR 1          /* frame-rate / CPU monitor */
-#define LV_USE_MEM_MONITOR  1          /* memory monitor */
+#define LV_USE_PERF_MONITOR 0
+#define LV_USE_MEM_MONITOR  0
 
 /* ===== input: touchscreen via evdev ===== */
 #define LV_USE_EVDEV        1

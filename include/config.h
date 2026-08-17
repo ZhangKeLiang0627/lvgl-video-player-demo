@@ -7,7 +7,7 @@
  */
 
 #ifndef VIDEO_PATH
-  #define VIDEO_PATH "/userdata/my_test.mp4"
+  #define VIDEO_PATH "/tmp/l1080_long.mp4"
 #endif
 
 #ifndef TOUCH_DEV

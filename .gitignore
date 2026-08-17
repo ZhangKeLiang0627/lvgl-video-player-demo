@@ -13,3 +13,7 @@ cmake-build-*/
 .idea/
 
 # LVGL is tracked as a git submodule (only its gitlink/pointer is committed).
+
+# Debug backup binaries
+*.bak.*
+demo.bak

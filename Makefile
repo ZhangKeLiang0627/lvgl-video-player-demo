@@ -44,7 +44,7 @@ CXXFLAGS  = -I $(LVGL_SRC) -I $(LVGL_INC) -I include -I . -DLV_CONF_INCLUDE_SIMP
 
 # FFMPEG_LDFLAGS must come BEFORE the pkg-config -l flags so the linker prefers
 # the non-system FFmpeg; the rpath makes the matching libs load at runtime too.
-LDFLAGS   = $(FFMPEG_LDFLAGS) $(shell pkg-config --cflags --libs libavformat libavcodec libavutil libswscale libswresample) -lm -lpthread -lasound -pthread
+LDFLAGS   = $(FFMPEG_LDFLAGS) $(shell pkg-config --cflags --libs libavformat libavcodec libavutil libswscale libswresample) -lm -lpthread -lasound -pthread -lrga
 
 SRCS_C    = $(shell find $(LVGL_SRC) -name '*.c')
 SRCS_CPP  = $(wildcard src/*.cpp)
