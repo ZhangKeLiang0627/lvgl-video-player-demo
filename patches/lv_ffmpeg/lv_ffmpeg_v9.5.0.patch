@@ -1,8 +1,8 @@
 diff --git a/src/libs/ffmpeg/lv_ffmpeg.c b/src/libs/ffmpeg/lv_ffmpeg.c
-index bd74fe0..e395cb0 100644
+index bd74fe0..df30678 100644
 --- a/src/libs/ffmpeg/lv_ffmpeg.c
 +++ b/src/libs/ffmpeg/lv_ffmpeg.c
-@@ -1,1017 +1,1523 @@
+@@ -1,1017 +1,1529 @@
 -/**
 - * @file lv_ffmpeg.c
 - *
@@ -2492,6 +2492,12 @@ index bd74fe0..e395cb0 100644
 +    av_seek_frame(fc, vst >= 0 ? vst : -1, ts, AVSEEK_FLAG_BACKWARD);
 +    /* re-anchor wall clock so get_time() returns ms */
 +    c->play_start_us = av_gettime_relative() - target_us - c->paused_accum_us;
++    /* re-anchor the pacer as well: present_due_us must track the new position,
++     * otherwise a backward seek leaves it far ahead of the play clock and the
++     * present guard (due_us >= present_due_us) never fires -> picture freezes. */
++    c->present_due_us = target_us;
++    c->decoded_ready = 0;          /* drop the pre-seek frame; re-decode from new pos */
++    c->presented_pts_us = -1;
 +    return LV_RESULT_OK;
 +}
 +
