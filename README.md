@@ -132,15 +132,18 @@ lvgl-video-player/
 
 ## 构建（CMake）
 
+不传 `-DCMAKE_BUILD_TYPE` 时默认就是 **Release**（`-O3`，播放器性能敏感），
+需要调试时再显式传 `-DCMAKE_BUILD_TYPE=Debug`。
+
 ```sh
 git clone --recurse-submodules https://github.com/ZhangKeLiang0627/lvgl-video-player
 cd lvgl-video-player
 
 # 软解（系统 FFmpeg，通用板子）
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build
 
 # 硬解（Rockchip FFmpeg + RKMPP）
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFFMPEG_PREFIX=/opt/ffmpeg-rkmp
+cmake -S . -B build -DFFMPEG_PREFIX=/opt/ffmpeg-rkmp
 
 cmake --build build -j
 ./build/lvgl-video-player
@@ -156,7 +159,7 @@ cmake --build build -j
 sudo apt install -y libsdl2-dev libavformat-dev libavcodec-dev \
     libavutil-dev libswscale-dev libswresample-dev libasound2-dev zlib1g-dev
 
-cmake -S . -B build/sdl -DCMAKE_BUILD_TYPE=Release -DENABLE_SDL=ON
+cmake -S . -B build/sdl -DENABLE_SDL=ON
 cmake --build build/sdl -j"$(nproc)"
 
 PLAYER_VIDEO=/path/to/video.mp4 ./build/sdl/lvgl-video-player   # 指定播放文件
@@ -172,8 +175,7 @@ PC 上没有该文件时用它可以指定本地视频）。
 sudo apt install -y g++-aarch64-linux-gnu
 
 cmake -S . -B build/arm64 \
-    -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake \
-    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake
 cmake --build build/arm64 -j"$(nproc)"
 ```
 

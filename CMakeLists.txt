@@ -4,6 +4,14 @@ project(lvgl_video_player C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Default to Release when no build type is given on the command line, so
+# `cmake -S . -B build` alone gets -O3 (this is a performance-sensitive video
+# player). Passing -DCMAKE_BUILD_TYPE=Debug still overrides it as usual.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    message(STATUS "CMAKE_BUILD_TYPE not set - defaulting to Release")
+endif()
+
 # ---- Build options ----------------------------------------------------------
 # Desktop simulator (SDL backend, default window 1280x800):
 #   cmake -S . -B build/sdl -DENABLE_SDL=ON
