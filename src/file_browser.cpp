@@ -1,5 +1,5 @@
-#include "FileBrowser.h"
-#include "App.h"
+#include "file_browser.h"
+#include "app.h"
 #include "config.h"
 #include "screen.h"
 

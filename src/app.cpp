@@ -1,4 +1,4 @@
-#include "App.h"
+#include "app.h"
 #include "config.h"
 #include "screen.h"
 #include "utils/lv_snapshot.h"

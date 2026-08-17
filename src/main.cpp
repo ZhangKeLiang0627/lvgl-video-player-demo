@@ -1,4 +1,4 @@
-#include "App.h"
+#include "app.h"
 #include "screen.h"
 #include "config.h"
 

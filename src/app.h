@@ -4,10 +4,10 @@
 #include <string>
 #include <cstdint>
 
-#include "Player.h"
-#include "AudioEngine.h"
-#include "FileBrowser.h"
-#include "Ui.h"
+#include "player.h"
+#include "audio_engine.h"
+#include "file_browser.h"
+#include "ui.h"
 
 /*
  * Top-level application orchestrator.

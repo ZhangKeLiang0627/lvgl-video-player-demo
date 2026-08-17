@@ -124,7 +124,7 @@ target_include_directories(lvgl-video-player PRIVATE
     # that are NOT propagated to consumers of the `lvgl` target, so we must
     # add them explicitly. `include/lvgl` carries the public <lvgl.h>; `src`
     # carries the internal "debugging/...", "widgets/...", "libs/..." headers
-    # that lvgl.h itself pulls in (and that App.cpp includes directly).
+    # that lvgl.h itself pulls in (and that app.cpp includes directly).
     ${CMAKE_CURRENT_SOURCE_DIR}/lvgl/include/lvgl
     ${CMAKE_CURRENT_SOURCE_DIR}/lvgl/src)
 target_link_libraries(lvgl-video-player PRIVATE

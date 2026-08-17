@@ -120,7 +120,7 @@ flowchart LR
 ```text
 lvgl-video-player/
 ├── src/                        # 全部源码与头文件（无独立 include/ 目录）
-│   ├── App.*  Ui.*  Player.*  AudioEngine.*  FileBrowser.*
+│   ├── app.*  ui.*  player.*  audio_engine.*  file_browser.*
 │   ├── screen.*                # 运行时屏幕几何 + spct() 百分比布局
 │   ├── config.h                # 编译期配置
 │   ├── main.cpp

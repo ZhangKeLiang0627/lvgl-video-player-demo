@@ -26,7 +26,7 @@
                           └─────────┘
 ```
 
-### `App` (`App.h/.cpp`)
+### `App` (`app.h/.cpp`)
 顶层编排者，持有 `Player`、`AudioEngine`、`FileBrowser`、`Ui` 四个成员。
 - `init()`：初始化 LVGL、显示（fbdev + RGA 或 SDL）、evdev 触摸（含旋转校准与
   逆变换）、ffmpeg；创建播放器与音频引擎；构建 UI；注册 200ms 周期定时器。
@@ -38,12 +38,12 @@
   在非拖动/非 seek 稳定期内更新进度条。
 - 接收 UI 回调：`onTogglePlay / onVolume / onSeekPress / onSeekRelease / playFile / toggleBrowser`。
 
-### `Player` (`Player.h/.cpp`)
+### `Player` (`player.h/.cpp`)
 对 `lv_ffmpeg` 播放器对象的薄封装：`create / setSrc / start / pause / resume / seek /
 getTime / getDuration`。头文件里用 `extern "C"` 前向声明了打补丁后新增的
 `lv_ffmpeg_player_*` 函数，业务代码无需触碰 `lv_ffmpeg.h`。
 
-### `AudioEngine` (`AudioEngine.h/.cpp`)
+### `AudioEngine` (`audio_engine.h/.cpp`)
 进程内音频播放引擎，自带 `std::thread` 工作线程，是视频的**从时钟**。
 - 用 FFmpeg 独立解封装音频流 → AAC 解码 → `swr_convert` 转 S16LE/44.1k →
   `snd_pcm_writei` 阻塞写入 ALSA（默认 ~46ms 低延迟缓冲）。
@@ -54,7 +54,7 @@ getTime / getDuration`。头文件里用 `extern "C"` 前向声明了打补丁�
   PCM 缓冲，保证音画永远在同一位置。
 - `reopen(path)` 通过原子标志让工作线程关闭旧文件、热打开新文件，**无需重启进程**。
 
-### `FileBrowser` (`FileBrowser.h/.cpp`)
+### `FileBrowser` (`file_browser.h/.cpp`)
 可进入子文件夹的文件浏览器 / 播放列表。
 - 从 `ROOT_DIR` 出发，懒扫描**当前目录**（不在启动时递归，避免卡顿）。
 - 只显示目录与视频扩展名文件（`.mp4/.mkv/.avi/...`），其余隐藏。
@@ -62,7 +62,7 @@ getTime / getDuration`。头文件里用 `extern "C"` 前向声明了打补丁�
   `App::playFile()`。UI 文本为英文（默认字体 Montserrat 不含 CJK 字形）。
 - 列表项用 `user_data` 存下标，回调里查 `entries_`，避免堆字符串泄漏。
 
-### `Ui` (`Ui.h/.cpp`)
+### `Ui` (`ui.h/.cpp`)
 构建并持有所有控件：左上播放/暂停按钮、右上 📂 列表按钮、顶部居中文件名/路径
 标签、底部进度条（归一化 0..1000）、进度条正上方时长标签、底部居中音量滑块、
 Play 右侧的一键截图按钮。所有 LVGL 事件回调是 static 跳板函数，从控件

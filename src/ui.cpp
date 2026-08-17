@@ -1,5 +1,5 @@
-#include "Ui.h"
-#include "App.h"
+#include "ui.h"
+#include "app.h"
 #include "config.h"
 #include "screen.h"
 
