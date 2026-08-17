@@ -4,6 +4,14 @@ project(lvgl_video_player C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ---- Build options ----------------------------------------------------------
+# Desktop simulator (SDL backend, default window 1280x800):
+#   cmake -S . -B build/sdl -DENABLE_SDL=ON
+# Cross compile for aarch64 (e.g. Rockchip boards):
+#   cmake -S . -B build/arm64 -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake
+#   (keep ENABLE_SDL=OFF for the framebuffer device build)
+option(ENABLE_SDL "Build with LVGL's SDL backend for desktop simulation" OFF)
+
 # ---- FFmpeg: optional Rockchip prefix (RKMPP hardware decode) --------------
 # Passing -DFFMPEG_PREFIX=/path/to/rockchip-ffmpeg prepends that prefix's
 # pkg-config dir, so the h264_rkmpp-enabled libs are found below. The layout
@@ -41,14 +49,38 @@ else()
     message(FATAL_ERROR "LVGL submodule not found. Run: git submodule update --init --recursive")
 endif()
 
+# ---- SDL2 for the desktop simulator backend --------------------------------
+# LVGL's own sdl driver (lv_sdl_window) lives inside the lvgl library, so SDL2
+# must be linked to the lvgl target, exactly like Keyboard-Guide does it. The
+# driver is compiled in via LV_USE_SDL=1 (lv_conf.h keeps it OFF by default so
+# device builds don't need SDL2 headers).
+if(ENABLE_SDL)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+    target_link_libraries(lvgl PRIVATE PkgConfig::SDL2)
+    target_compile_definitions(lvgl PRIVATE LV_USE_SDL=1)
+    message(STATUS "SDL simulator backend enabled (default window 1280x800)")
+endif()
+
 # ---- FFmpeg / ALSA / RGA ----------------------------------------------------
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED
     libavformat libavcodec libavutil libswscale libswresample)
 find_library(ALSA_LIB asound REQUIRED)
-# RGA 2D accelerator (Rockchip): NV12 -> RGB + scale offload used by lv_ffmpeg.c
+# RGA 2D accelerator (Rockchip): NV12 -> RGB + scale offload used by lv_ffmpeg.c.
+# Optional — generic PCs (SDL simulator) don't ship librga, in which case we
+# build without it and lv_ffmpeg.c falls back to pure CPU sws_scale
+# (LV_FFMPEG_USE_RGA=0).
 find_path(RGA_INCLUDE_DIR rga/rga.h)
-find_library(RGA_LIB rga REQUIRED)
+find_library(RGA_LIB rga)
+if(RGA_LIB AND RGA_INCLUDE_DIR)
+    message(STATUS "librga found - RGA 2D hardware offload enabled")
+else()
+    message(STATUS "librga NOT found - building WITHOUT RGA (CPU sws_scale only)")
+    set(RGA_LIB "")
+    set(RGA_INCLUDE_DIR "")
+    target_compile_definitions(lvgl PRIVATE LV_FFMPEG_USE_RGA=0)
+endif()
 
 # ---- Our application --------------------------------------------------------
 # src/utils/*.cpp carries the lv_snapshot screen-capture tool.
@@ -56,6 +88,12 @@ file(GLOB APP_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/*.cpp)
 add_executable(lvgl-video-player ${APP_SOURCES})
+
+# Tell the app which backend to init at runtime: PLAYER_USE_SDL=1 -> SDL window,
+# otherwise the Linux framebuffer (/dev/fb0). Same macro pattern as
+# Keyboard-Guide's KEYBOARD_GUIDE_USE_SDL.
+target_compile_definitions(lvgl-video-player PRIVATE
+    PLAYER_USE_SDL=$<IF:$<BOOL:${ENABLE_SDL}>,1,0>)
 
 # The Rockchip FFmpeg .pc files are dpkg-packed with prefix=/usr, so they
 # contribute no -I/-L of their own. Add the prefix paths explicitly so
@@ -69,7 +107,7 @@ if(FFMPEG_PREFIX)
 endif()
 
 target_include_directories(lvgl-video-player PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${FFMPEG_INCLUDE_DIRS}
     ${RGA_INCLUDE_DIR}
     # LVGL's own headers are reached via directory-scoped include_directories

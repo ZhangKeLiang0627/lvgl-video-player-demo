@@ -3,12 +3,19 @@
 #include "screen.h"
 #include "utils/lv_snapshot.h"
 #include "debugging/sysmon/lv_sysmon.h"
+#if PLAYER_USE_SDL
+    #include "drivers/sdl/lv_sdl_window.h"
+#else
+    #include "drivers/display/fb/lv_linux_fbdev.h"
+    #include "drivers/evdev/lv_evdev.h"
+#endif
 
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <thread>
 #include <algorithm>
 
 App::App() : browser_(*this, ROOT_DIR), ui_(*this)
@@ -29,8 +36,15 @@ bool App::init()
 
     lv_init();
 
+    /* Backend: SDL window (desktop simulator, ENABLE_SDL=ON) or the Linux
+     * framebuffer (/dev/fb0, device build). Selected at compile time via
+     * PLAYER_USE_SDL (defined by CMake; 0 on the device Makefile build). */
+#if PLAYER_USE_SDL
+    lv_display_t * disp = lv_sdl_window_create(1280, 800);
+#else
     lv_display_t * disp = lv_linux_fbdev_create();
     lv_linux_fbdev_set_file(disp, "/dev/fb0");
+#endif
 
     /* Screen geometry: physical framebuffer size + requested rotation.
      * g_screen.w/h become the logical resolution every UI layout uses. */
@@ -53,24 +67,33 @@ bool App::init()
               << " rotation=" << g_screen.rotation
               << " logical=" << g_screen.w << "x" << g_screen.h << "\n";
 
+#if !PLAYER_USE_SDL
     lv_indev_t * touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, TOUCH_DEV);
     if (touch == nullptr)
         LV_LOG_WARN("evdev touch open failed: " TOUCH_DEV);
+#endif
+    /* SDL backend: lv_sdl_window_create() installs its own mouse pointer. */
 
     lv_ffmpeg_init();
+
+    /* Allow overriding the default clip at runtime: PLAYER_VIDEO env var
+     * (handy for the SDL simulator where the board path doesn't exist). */
+    const char * video = getenv("PLAYER_VIDEO");
+    if (!video || !*video) video = VIDEO_PATH;
 
     if (!player_.create(lv_screen_active(), g_screen.w, g_screen.h)) {
         LV_LOG_WARN("lv_ffmpeg_player_create failed");
     }
 
-    fitToScreen(VIDEO_PATH);   /* probe native size, size widget to contain-fit */
+    fitToScreen(video);   /* probe native size, size widget to contain-fit */
 
     screen_ = lv_screen_active();
 
-    lv_result_t res = lv_ffmpeg_player_set_src(player_.obj(), VIDEO_PATH);
+    lv_result_t res = lv_ffmpeg_player_set_src(player_.obj(), video);
     if (res != LV_RESULT_OK) {
         lv_obj_t * label = lv_label_create(screen_);
-        lv_label_set_text(label, "video src fail:\n" VIDEO_PATH);
+        std::string errMsg = std::string("video src fail:\n") + video;
+        lv_label_set_text(label, errMsg.c_str());
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
         lv_obj_center(label);
     } else {
@@ -80,7 +103,7 @@ bool App::init()
     int32_t dur = player_.getDuration();
     std::cerr << "[init] duration_ms=" << dur << "\n";
 
-    audio_.open(VIDEO_PATH);
+    audio_.open(video);
     audio_.start();
 
 #if LV_USE_PERF_MONITOR
@@ -112,6 +135,12 @@ void App::run()
      * interval ≈ 28ms (~35fps) — smooth, no stutter. */
     while (1) {
         lv_timer_handler();
+#if PLAYER_USE_SDL
+        /* Desktop simulator: yield so the SDL window stays responsive and the
+         * host CPU isn't pegged. The ~10ms/syscall penalty that forced the
+         * tight loop on RK3566 does not apply to a desktop PC. */
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+#endif
     }
 }
 

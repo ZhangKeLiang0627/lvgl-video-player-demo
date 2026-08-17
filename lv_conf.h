@@ -24,6 +24,15 @@
  * (~20 ms of redundant re-renders/frame). 1280 = full height -> 1 band. */
 #define LV_LINUX_FBDEV_BUFFER_SIZE   1280
 
+/* ===== desktop simulator backend (SDL) =====
+ * OFF by default: the device build has no SDL2 headers. The CMake SDL build
+ * enables it with -DLV_USE_SDL=1 (see ENABLE_SDL in CMakeLists.txt); the
+ * application then selects the backend via PLAYER_USE_SDL. The default
+ * simulator window is 1280x800. */
+#ifndef LV_USE_SDL
+    #define LV_USE_SDL          0
+#endif
+
 /* ===== video playback: LVGL official ffmpeg soft decode ===== */
 #define LV_USE_FFMPEG       1
 #define LV_FFMPEG_DUMP_FORMAT       0

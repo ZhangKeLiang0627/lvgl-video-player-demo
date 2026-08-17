@@ -1,8 +1,8 @@
 diff --git a/src/libs/ffmpeg/lv_ffmpeg.c b/src/libs/ffmpeg/lv_ffmpeg.c
-index bd74fe0..fd53f2f 100644
+index bd74fe0..4cdb82e 100644
 --- a/src/libs/ffmpeg/lv_ffmpeg.c
 +++ b/src/libs/ffmpeg/lv_ffmpeg.c
-@@ -1,1017 +1,1455 @@
+@@ -1,1017 +1,1481 @@
 -/**
 - * @file lv_ffmpeg.c
 - *
@@ -1048,9 +1048,18 @@ index bd74fe0..fd53f2f 100644
 +/* Rockchip RGA 2D accelerator: offloads NV12->RGB color conversion + scaling
 + * from the CPU. sws_scale was the playback bottleneck on RK3566 (~47 ms/frame
 + * at 1080p); RGA does the same in <2 ms. */
-+#include "rga/rga.h"
-+#include "rga/im2d.h"
++/* RGA 2D hardware offload (Rockchip only). Set LV_FFMPEG_USE_RGA=0 on builds
++ * that don't ship librga (e.g. the desktop SDL simulator) — the decoder then
++ * always uses CPU sws_scale, no RGA symbols are referenced. */
++#ifndef LV_FFMPEG_USE_RGA
++    #define LV_FFMPEG_USE_RGA 1
++#endif
++#if LV_FFMPEG_USE_RGA
++    #include "rga/rga.h"
++    #include "rga/im2d.h"
++#endif
 +
++#if LV_FFMPEG_USE_RGA
 +/* dma_buf allocation for the RGA fast path (importbuffer_fd). On RK3566 there
 + * is no IOMMU, so importing a normal heap buffer by virtual address forces RGA
 + * to pin/remap every page each frame (~13 ms). Importing a dma_buf by fd lets
@@ -1070,6 +1079,7 @@ index bd74fe0..fd53f2f 100644
 +};
 +#define DMA_HEAP_IOCTL_ALLOC _IOWR('H', 0x00, struct dma_heap_allocation_data)
 +#endif
++#endif /* LV_FFMPEG_USE_RGA */
 +
 +/*********************
 + *      DEFINES
@@ -1124,11 +1134,13 @@ index bd74fe0..fd53f2f 100644
 +    int render_w;   /* current render (object) width  - 0 until first fit */
 +    int render_h;   /* current render (object) height - 0 until first fit */
 +    AVFrame * sw_frame;          /* CPU frame for hw(drmprime)->cpu transfer */
++#if LV_FFMPEG_USE_RGA
 +    AVFrame * rga_nv12;          /* fallback scratch (heap) if dma_buf unavailable */
 +    int rga_fd;                  /* dma_buf fd for the NV12 scratch (RGA fast path) */
 +    void * rga_va;               /* mmap of rga_fd: CPU fills it, RGA reads via fd */
 +    size_t rga_size;             /* allocated bytes */
 +    int rga_w, rga_h, rga_wstride; /* cached geometry for realloc-on-change */
++#endif
 +    int sws_src_w, sws_src_h;    /* cached sws source geometry */
 +    enum AVPixelFormat sws_src_pix;
 +    int sws_dst_w, sws_dst_h;    /* cached sws dest geometry */
@@ -1487,6 +1499,7 @@ index bd74fe0..fd53f2f 100644
 +    return !(desc->flags & AV_PIX_FMT_FLAG_RGB) && desc->nb_components >= 2;
 +}
 +
++#if LV_FFMPEG_USE_RGA
 +/* Convert a CPU frame (NV12 or YUV420P) straight to the canvas pixel format
 + * using the Rockchip RGA 2D accelerator. This replaces the CPU-bound sws_scale
 + * (the real playback bottleneck: ~47 ms/frame at 1080p). Returns 0 on success,
@@ -1655,6 +1668,7 @@ index bd74fe0..fd53f2f 100644
 +    }
 +    return 0;
 +}
++#endif /* LV_FFMPEG_USE_RGA */
 +
 +static int ffmpeg_output_video_frame(struct ffmpeg_context_s * ffmpeg_ctx, AVFrame * frame)
 +{
@@ -1712,6 +1726,7 @@ index bd74fe0..fd53f2f 100644
 +        }
 +    }
 +
++#if LV_FFMPEG_USE_RGA
 +    /* Prefer the hardware RGA path for the NV12 frames produced by RKMPP: it
 +     * does color conversion + scaling in <2 ms vs the ~47 ms sws_scale took at
 +     * 1080p. Falls back to CPU sws_scale if RGA cannot be used (soft decode,
@@ -1729,6 +1744,17 @@ index bd74fe0..fd53f2f 100644
 +    } else {
 +        ret = 0;
 +    }
++#else
++    /* No RGA (e.g. desktop SDL simulator): always CPU sws_scale. */
++    ret = sws_scale(
++              ffmpeg_ctx->sws_ctx,
++              (const uint8_t * const *)(frame->data),
++              frame->linesize,
++              0,
++              height,
++              ffmpeg_ctx->video_dst_data,
++              ffmpeg_ctx->video_dst_linesize);
++#endif
 +
 +    return ret;
 +}

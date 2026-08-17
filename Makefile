@@ -39,8 +39,8 @@ else
   FFMPEG_LDFLAGS = -L $(FFMPEG_PREFIX)/usr/lib/aarch64-linux-gnu -Wl,-rpath,$(FFMPEG_PREFIX)/usr/lib/aarch64-linux-gnu
 endif
 
-CFLAGS    = -I $(LVGL_SRC) -I $(LVGL_INC) -I include -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall $(FFMPEG_CFLAGS)
-CXXFLAGS  = -I $(LVGL_SRC) -I $(LVGL_INC) -I include -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall -std=c++17 $(FFMPEG_CFLAGS)
+CFLAGS    = -I $(LVGL_SRC) -I $(LVGL_INC) -I src -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall $(FFMPEG_CFLAGS)
+CXXFLAGS  = -I $(LVGL_SRC) -I $(LVGL_INC) -I src -I . -DLV_CONF_INCLUDE_SIMPLE -O2 -Wall -std=c++17 $(FFMPEG_CFLAGS)
 
 # FFMPEG_LDFLAGS must come BEFORE the pkg-config -l flags so the linker prefers
 # the non-system FFmpeg; the rpath makes the matching libs load at runtime too.
