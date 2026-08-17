@@ -15,6 +15,54 @@
 - 播放 / 暂停、可拖动进度条、音量滑块、文件浏览器 / 播放列表
 - LVGL sysmon 帧率 / 内存监视器
 
+## 视频输出链路
+
+解码阶段与像素转换阶段各自独立选择：**解码**在 RKMPP 硬解 / 软解之间
+运行时自动切换；**像素转换**优先用 RGA 2D 硬件，不可用时回退 CPU
+`sws_scale`。因此软解、硬解共用同一条 LVGL 上屏管道，最终都输出到
+`/dev/fb0`。
+
+### 硬解码链路（Rockchip FFmpeg + RKMPP，RK35xx 默认路径）
+
+```mermaid
+flowchart LR
+    A["视频文件<br/>(H.264 / HEVC)"] --> B["FFmpeg 解封装<br/>av_read_frame"]
+    B --> C["RKMPP 硬解<br/>h264_rkmpp / hevc_rkmpp<br/><b>VPU 硬件解码</b>"]
+    C --> D["YUV420P 帧<br/>系统内存"]
+    D --> E["CPU 打包<br/>YUV420P → NV12"]
+    E --> G["RGA 2D 硬件<br/>NV12 → RGB + 缩放<br/><b>~2ms</b>"]
+    G --> I["RGB 帧缓冲<br/>video_dst_data"]
+    I --> J["LVGL 合成<br/>lv_image → draw buffer"]
+    J --> K["<b>/dev/fb0 屏幕</b>"]
+```
+
+### 软解码链路（系统 FFmpeg，或硬解器不可用时自动回退）
+
+```mermaid
+flowchart LR
+    A["视频文件<br/>(H.264 / HEVC)"] --> B["FFmpeg 解封装<br/>av_read_frame"]
+    B --> C["软件解码<br/>h264 / hevc<br/><b>CPU 解码</b>"]
+    C --> D["YUV420P 帧<br/>系统内存"]
+    D --> E["CPU 打包<br/>YUV420P → NV12"]
+    E --> F{"RGA 可用?"}
+    F -- "是（Rockchip 板）" --> G["RGA 2D 硬件<br/>NV12 → RGB + 缩放"]
+    F -- "否（通用板）" --> H["sws_scale (CPU)<br/>YUV420P → RGB"]
+    G --> I["RGB 帧缓冲<br/>video_dst_data"]
+    H --> I
+    I --> J["LVGL 合成<br/>lv_image → draw buffer"]
+    J --> K["<b>/dev/fb0 屏幕</b>"]
+```
+
+| 阶段 | 硬解码 | 软解码 |
+|------|--------|--------|
+| 解码 | RKMPP（VPU 硬件，CPU 占用低） | FFmpeg 软解（CPU 占用高） |
+| 像素转换 | RGA 2D 硬件（~2ms @ 1080p） | 同左（Rockchip 板）/ `sws_scale`（通用板） |
+| 最终输出 | `/dev/fb0` | `/dev/fb0` |
+
+> 无论哪条链路，解码出的帧最终都写入同一份 RGB 缓冲，交给 LVGL 合成后
+> 一次性写入 `/dev/fb0`，所以「硬解构建」的产物在普通板子上运行会自动
+> 走软解码 + `sws_scale`，不会报错。
+
 ## 依赖
 
 | 依赖 | 用途 | 安装（Ubuntu / Debian） | 检查是否就绪 |
