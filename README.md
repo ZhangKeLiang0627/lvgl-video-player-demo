@@ -3,7 +3,7 @@
 基于 LVGL 的嵌入式 Linux 视频播放器（C++）：FFmpeg 解码 → LVGL 上屏 + ALSA 音频。
 支持硬解加速（RKMPP）、帧时钟锁帧（23.976/24/25/30fps 播放节奏稳定不抖）、
 音画同步、播放/暂停/进度拖拽、文件浏览器、旋转角与任意分辨率自适应、运行时截图。
-RK3566 @ 1080p 实测 ~36fps。
+
 
 > A C++ LVGL video player for embedded Linux framebuffers: FFmpeg decode to
 > screen + ALSA audio, with A/V sync, frame-clock paced playback (stable
