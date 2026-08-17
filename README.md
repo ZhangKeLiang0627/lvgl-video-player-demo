@@ -17,6 +17,8 @@
 - **分辨率自适应 + 启动旋转角**：任意面板分辨率 + `-r 0/90/180/270`，
   控件全部按屏宽高百分比布局
 - **运行时截屏工具**（`utils/lv_snapshot`）：导出 PNG 用于 README 预览 / 调试
+  - **快捷按钮**：Play 旁的橙色 "Shot" 按钮一键截图
+  - **专业命名**：`shot_YYYYMMDD_HHMMSS_mmm_WxH.png`（时间戳 ms 避免重名 + 分辨率后缀区分横竖屏）
 - **桌面 SDL 仿真**（`-DENABLE_SDL=ON`，默认 1280×800）：PC 上免真机预览
   UI，鼠标模拟触摸，非 Rockchip 平台自动关 RGA 走 CPU 软解
 - **aarch64 交叉编译**：`cmake/aarch64-linux-gnu.cmake` toolchain 文件
@@ -28,9 +30,9 @@
 | ![portrait](docs/screenshots/portrait.png) | ![landscape](docs/screenshots/landscape.png) | ![sdl-sim](docs/screenshots/sdl_sim.png) |
 | `./demo` | `./demo -r 90` | `cmake -DENABLE_SDL=ON` 在 PC 运行 |
 
-前两张由 `utils/lv_snapshot` 在 RK3566 真机上抓取（视频帧正在播放）；第三张
-来自 x86_64 桌面仿真（SDL 窗口 + 软件解码），三张都显示同一套 spct 百分比
-布局。
+三张截图都由 `utils/lv_snapshot` 在真机/桌面仿真运行中抓取（同样的 `spct()` 百分比
+布局在三端一致），彩色测试视频由 ffmpeg `testsrc2` + `drawtext` 生成（实时时间戳、
+滚动文字、标题、帧号 + 440Hz 音轨）。
 
 ## 视频输出链路
 
@@ -231,8 +233,16 @@ LVGL_ROTATE=180 ./build/lvgl-video-player          # 环境变量方式
 | `-r <deg>` / `--rotate <deg>` | 旋转角 0/90/180/270（默认 `DEFAULT_ROTATION`） |
 | `--shot <file>` | 启动 2s 后截一张屏到 PNG（README 预览图即由此生成） |
 | `--shot-dir <dir> [--shot-period <sec>]` | 周期性截屏到 `<dir>/shot_NNN.png`（默认每 5s） |
+| `Shot` 按钮（Play 旁） | 一键截图，落盘到 `/tmp/shot_YYYYMMDD_HHMMSS_mmm_WxH.png`（见下） |
 | `PLAYER_VIDEO=<path>` | 环境变量覆盖默认播放文件（SDL 仿真必备） |
 | `LVGL_ROTATE=<deg>` | 环境变量设置旋转角，等价于 `-r` |
+
+**`Shot` 按钮命名规则** `shot_<YYYYMMDD>_<HHMMSS>_<mmm>_<WxH>.png`：
+- `YYYYMMDD_HHMMSS`：本地墙钟时间，文件按时间自然排序
+- `mmm`：毫秒（0–999），保证连按不重名
+- `WxH`：当前逻辑分辨率（旋转后），一眼区分横/竖屏
+
+例：`shot_20260817_183045_712_1280x800.png`。
 
 截屏由 `utils/lv_snapshot` 提供：`lv_snapshot_take()` 抓取当前屏快照为
 RGB888 帧，再用手写 zlib 编码器生成真彩色 PNG（仅依赖 `libz`，不引入

@@ -30,6 +30,11 @@ public:
     void playFile(const std::string & path);
     void toggleBrowser();
 
+    /* Save a PNG snapshot of the current screen under a timestamped name
+     * (shot_YYYYMMDD_HHMMSS_mmm_WxH.png). Bound to the "Shot" button in the
+     * top bar; the same path is used internally by --shot / --shot-dir. */
+    void onSnapshot();
+
     /* Screen capture (utils/lv_snapshot):
      *   startSnapshot(dir, sec)  - save <dir>/shot_000.png every `sec` seconds
      *   takeSnapshotOnce(path)   - save one shot after the UI settles (~2 s) */

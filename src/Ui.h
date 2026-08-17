@@ -38,11 +38,13 @@ private:
     static void volSliderCb(lv_event_t * e);
     static void seekSliderCb(lv_event_t * e);
     static void openBtnCb(lv_event_t * e);
+    static void shotBtnCb(lv_event_t * e);
 
     App &     app_;
     lv_obj_t * screen_      = nullptr;
     lv_obj_t * playBtn_     = nullptr;
     lv_obj_t * playBtnLabel_= nullptr;
+    lv_obj_t * shotBtn_     = nullptr;
     lv_obj_t * seekSlider_  = nullptr;
     lv_obj_t * timeLabel_   = nullptr;
     lv_obj_t * titleLabel_  = nullptr;

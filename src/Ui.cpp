@@ -27,6 +27,20 @@ void Ui::build(lv_obj_t * screen)
     lv_obj_center(playBtnLabel_);
     lv_obj_add_event_cb(playBtn_, playBtnCb, LV_EVENT_CLICKED, &app_);
 
+    /* top-left, right of Play: one-shot screenshot button. Orange so it stands
+     * out against the green Play / blue directory buttons. Saves to /tmp/ with
+     * a timestamp + resolution suffix so successive shots never collide and
+     * each file is self-describing (see App::onSnapshot). */
+    shotBtn_ = lv_button_create(screen);
+    lv_obj_set_size(shotBtn_, spct(W, 12), spct(H, 5));
+    lv_obj_align_to(shotBtn_, playBtn_, LV_ALIGN_OUT_RIGHT_MID, spct(W, 2), 0);
+    lv_obj_set_style_bg_color(shotBtn_, lv_color_make(0xE6, 0x7E, 0x22), 0);
+    lv_obj_set_style_radius(shotBtn_, 12, 0);
+    lv_obj_t * shot_lbl = lv_label_create(shotBtn_);
+    lv_label_set_text(shot_lbl, LV_SYMBOL_IMAGE " Shot");
+    lv_obj_center(shot_lbl);
+    lv_obj_add_event_cb(shotBtn_, shotBtnCb, LV_EVENT_CLICKED, &app_);
+
     /* top-right: open playlist / file browser */
     lv_obj_t * pl_btn = lv_button_create(screen);
     lv_obj_set_size(pl_btn, spct(W, 9), spct(H, 5));
@@ -171,6 +185,12 @@ void Ui::openBtnCb(lv_event_t * e)
 {
     App * a = (App *)lv_event_get_user_data(e);
     if (a) a->toggleBrowser();
+}
+
+void Ui::shotBtnCb(lv_event_t * e)
+{
+    App * a = (App *)lv_event_get_user_data(e);
+    if (a) a->onSnapshot();
 }
 
 void Ui::volSliderCb(lv_event_t * e)

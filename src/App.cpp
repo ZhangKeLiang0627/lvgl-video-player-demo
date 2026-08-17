@@ -11,7 +11,9 @@
 #endif
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -290,4 +292,31 @@ void App::snapshotTick()
         lv_snapshot_save_png(target, shotOncePath_.c_str());
         shotOncePath_.clear();
     }
+}
+
+void App::onSnapshot()
+{
+    /* Filename scheme: shot_YYYYMMDD_HHMMSS_mmm_WxH.png
+     *   - YYYYMMDD_HHMMSS = local-time wall clock (so files sort by time)
+     *   - mmm             = milliseconds, keeps rapid bursts unique
+     *   - WxH            = current logical (post-rotation) screen size, so
+     *                       the file tells you its orientation at a glance */
+    namespace ch = std::chrono;
+    const auto now   = ch::system_clock::now();
+    const auto tt    = ch::system_clock::to_time_t(now);
+    const auto epoch = now.time_since_epoch();
+    const int  ms    = (int)(ch::duration_cast<ch::milliseconds>(epoch).count() % 1000);
+
+    std::tm tm = *std::localtime(&tt);   /* C standard <ctime>; safe at our call rate */
+
+    char ts[32];
+    std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tm);
+
+    char path[96];
+    std::snprintf(path, sizeof(path), "/tmp/shot_%s_%03d_%dx%d.png",
+                  ts, ms, g_screen.w, g_screen.h);
+
+    lv_obj_t * target = screen_ ? screen_ : lv_screen_active();
+    lv_snapshot_save_png(target, path);
+    std::cerr << "[snapshot] button -> " << path << "\n";
 }
