@@ -27,7 +27,7 @@
 
 **可选 — RKMPP 硬件解码**：系统自带的 FFmpeg 通常没有 `h264_rkmpp` 硬解器，
 需要 Rockchip 定制版 FFmpeg。`docs/ffmpeg-rkmp/ffmpeg-rkmp-4.2.4-arm64-debs.tar.gz`
-已内置全部 deb（也可从仓库 Release 页面下载）。解包到独立前缀目录
+已内置全部 deb。解包到独立前缀目录
 `/opt/ffmpeg-rkmp`（勿解包到系统 `/`，会覆盖系统 FFmpeg）：
 
 ```sh
