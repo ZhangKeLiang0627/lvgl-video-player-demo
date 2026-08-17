@@ -8,37 +8,52 @@
 > screen + ALSA audio, with A/V sync, play/pause/seek, rotation, a file
 > browser playlist and one-click screenshots.
 
-## 快速上手
+## 快速上手：编译与运行
+
+仓库默认构建产物为 `lvgl-video-player`（或 `./demo`）。以下三种方式都是编译，
+按你的目标平台选一种：
+
+### ① 机器本地编译（真机 / 通用 Linux）
 
 ```sh
 git clone --recurse-submodules https://github.com/ZhangKeLiang0627/lvgl-video-player
 cd lvgl-video-player
 
-cmake -S . -B build          # 默认 Release；加 -DFFMPEG_PREFIX=/opt/ffmpeg-rkmp 走 RKMPP 硬解
+# 软解（系统 FFmpeg，通用板子）
+cmake -S . -B build
+# 硬解（Rockchip FFmpeg + RKMPP，需先解包 deb 到独立前缀目录）
+cmake -S . -B build -DFFMPEG_PREFIX=/opt/ffmpeg-rkmp
+
 cmake --build build -j
-./build/lvgl-video-player    # 默认竖屏；-r 90 横屏；--shot /tmp/ui.png 截一张图
+./build/lvgl-video-player        # 默认竖屏；-r 90 横屏；--shot /tmp/ui.png 截一张图
 ```
 
-依赖一键装齐（Ubuntu / Debian）：
+### ② SDL 桌面仿真（PC 上预览 UI，免真机）
 
 ```sh
-sudo apt install -y cmake g++ pkg-config git \
-    libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
-    libasound2-dev zlib1g-dev
+sudo apt install -y libsdl2-dev
+cmake -S . -B build/sdl -DENABLE_SDL=ON
+cmake --build build/sdl -j"$(nproc)"
+PLAYER_VIDEO=/path/to/video.mp4 ./build/sdl/lvgl-video-player   # 1280×800 窗口，鼠标当触摸
 ```
 
-检查：`pkg-config --modversion libavformat` 有版本号即就绪（librga 仅 Rockchip 板需要，
-通用 PC 构建自动跳过、走 CPU 软解）。
+### ③ 交叉编译（aarch64 板子，如 RK35xx）
 
-## 原理：视频输出链路
+```sh
+sudo apt install -y g++-aarch64-linux-gnu
+cmake -S . -B build/arm64 -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake
+cmake --build build/arm64 -j"$(nproc)"
+```
 
-解码与像素转换各自独立选择，软/硬解共用同一条上屏管道：
+## 原理
+
+解码与像素转换各自独立选择，软/硬解共用同一条上屏管道，最终写入 `/dev/fb0`：
 
 ```mermaid
 flowchart LR
     A["视频文件"] --> B["FFmpeg 解封装"]
     B --> C{"解码器"}
-    C -->|"RKMPP 硬解<br/>(VPU)"| D["YUV420P"]
+    C -->|"RKMPP 硬解 (VPU)"| D["YUV420P"]
     C -->|"软解 (CPU)"| D
     D --> E["CPU 打包 NV12"]
     E --> F{"RGA 可用?"}
@@ -49,7 +64,7 @@ flowchart LR
     I --> J["LVGL 合成 → /dev/fb0"]
 ```
 
-- **解码**：优先 `h264_rkmpp` / `hevc_rkmpp` 硬解，找不到自动回退软解
+- **解码**：优先 `h264_rkmpp`/`hevc_rkmpp` 硬解，找不到自动回退软解
 - **转换**：优先 RGA 2D 硬件，不可用（通用板）自动回退 CPU `sws_scale`
 - 同一份二进制在普通板子上运行自动走软解，不会报错
 
@@ -77,14 +92,52 @@ flowchart LR
 分辨率自适应：播放器从 `/dev/fb0` 读取真实尺寸，控件按 `spct(宽/高, 百分比)` 布局，
 换任意分辨率屏幕无需改代码；触摸坐标由 LVGL 按旋转自动映射。
 
-## 进阶
+配置：编辑 `src/config.h`（默认视频、触摸设备、音量增益、默认旋转角等）。
 
-- **桌面仿真（PC 预览 UI）**：`cmake -S . -B build/sdl -DENABLE_SDL=ON`，默认
-  1280×800 窗口、鼠标模拟触摸，无需真机
-- **交叉编译（aarch64）**：加 `-DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake`
-- **配置**：编辑 `src/config.h`（默认视频、触摸设备、音量增益等；头文件与源码同目录）
-- **RKMPP 硬解 FFmpeg**：Rockchip 定制 deb 已随 `docs/ffmpeg-rkmp/` 分发，解包到
-  独立前缀目录（勿解包到系统 `/`），见仓库 Release 页
+## 目录结构
+
+```text
+lvgl-video-player/
+├── src/                        # 全部源码与头文件（无独立 include/ 目录）
+│   ├── App.*  Ui.*  Player.*  AudioEngine.*  FileBrowser.*
+│   ├── screen.*                # 运行时屏幕几何 + spct() 百分比布局
+│   ├── config.h                # 编译期配置
+│   ├── main.cpp
+│   └── utils/lv_snapshot.*     # 截屏工具：LVGL 快照 → PNG（zlib）
+├── lv_conf.h                   # LVGL 配置（构建自动引用）
+├── cmake/aarch64-linux-gnu.cmake   # 交叉编译 toolchain
+├── patches/lv_ffmpeg/          # lv_ffmpeg.c 补丁（RGA 加速、暂停/seek 等）
+├── docs/                       # 预览截图、RKMPP FFmpeg deb 包
+├── CMakeLists.txt              # 主构建（ENABLE_SDL / FFMPEG_PREFIX）
+└── Makefile                    # 板载构建（可选）
+```
+
+`lvgl/` 为 git submodule（v9.5.0，构建时自动打补丁）。
+
+## 依赖
+
+| 依赖 | 用途 | 安装（Ubuntu / Debian） | 检查是否就绪 |
+|------|------|------------------------|--------------|
+| LVGL v9.5.0 | GUI 框架 | git submodule，clone 时自动拉取 | `git submodule status` 显示 `c65e112...` |
+| FFmpeg 开发包 | 视频解码 | `sudo apt install libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev` | `pkg-config --modversion libavformat` 输出版本号 |
+| librga | RGA 2D 加速（YUV→RGB） | Rockchip 镜像自带；否则 `sudo apt install librga-dev` | `ls /usr/include/rga/rga.h` 存在 |
+| ALSA 开发包 | 音频输出 | `sudo apt install libasound2-dev` | `ls /usr/include/alsa/asoundlib.h` 存在 |
+| zlib | 截屏工具 PNG 编码 | Ubuntu 自带（`libz`）；否则 `sudo apt install zlib1g-dev` | `ls /usr/include/zlib.h` 存在 |
+| libsdl2-dev（可选） | SDL 桌面仿真（`-DENABLE_SDL=ON`） | `sudo apt install libsdl2-dev` | `pkg-config --modversion sdl2` 输出版本号 |
+| 构建工具 | 编译 | `sudo apt install cmake g++ pkg-config git` | `cmake --version` 输出版本号 |
+
+> 非 Rockchip 板（无 librga）构建时自动跳过 RGA、走 CPU `sws_scale`，无需安装。
+
+**可选 — RKMPP 硬解 FFmpeg**：Rockchip 定制 deb 已随 `docs/ffmpeg-rkmp/` 分发
+（也可从仓库 Release 页下载），解包到独立前缀目录（勿解包到系统 `/`，会覆盖系统
+FFmpeg）：
+
+```sh
+mkdir -p /opt/ffmpeg-rkmp /tmp/ffrk && tar xzf docs/ffmpeg-rkmp/ffmpeg-rkmp-4.2.4-arm64-debs.tar.gz -C /tmp/ffrk
+cd /tmp/ffrk && for d in *.deb; do dpkg-deb -x "$d" /opt/ffmpeg-rkmp; done
+```
+
+检查：`ffmpeg -decoders | grep rkmpp` 能看到 `h264_rkmpp`。
 
 ## 已知限制
 
