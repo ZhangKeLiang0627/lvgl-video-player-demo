@@ -52,6 +52,15 @@
  * rendering and write it to a PNG file (--shot / --shot-dir options). */
 #define LV_USE_SNAPSHOT     1
 
+/* ===== fonts =====
+ * Default to the bundled Source Han Sans SC CJK font so Chinese UI text
+ * (file browser ".. (上级目录)", titles, ...) renders real glyphs instead
+ * of tofu boxes - the stock default (Montserrat 14) has no CJK glyphs.
+ * The font also embeds the FontAwesome symbols used by the UI
+ * (LV_SYMBOL_LEFT/PLAY/CLOSE/VIDEO/DIRECTORY etc.), so icons keep working. */
+#define LV_FONT_SOURCE_HAN_SANS_SC_16_CJK  1
+#define LV_FONT_DEFAULT  &lv_font_source_han_sans_sc_16_cjk
+
 /* ===== memory / refresh =====
  * LV_MEM_SIZE MUST be large enough for the full-frame display buffer
  * (w*h*bpp = 800*1280*4 ~= 4 MB) plus LVGL objects, or lv_display_set_buffers
