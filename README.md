@@ -10,14 +10,27 @@
 
 ## 快速上手：编译与运行
 
-仓库默认构建产物为 `lvgl-video-player`（或 `./demo`）。以下三种方式都是编译，
-按你的目标平台选一种：
+仓库默认构建产物为 `lvgl-video-player`（或 `./demo`）。以下几步是编译，按你的
+目标平台选一种：
 
-### ① 机器本地编译（真机 / 通用 Linux）
+### ① 准备：安装依赖（Ubuntu / Debian）
 
 ```sh
-git clone --recurse-submodules https://github.com/ZhangKeLiang0627/lvgl-video-player
-cd lvgl-video-player
+sudo apt install -y cmake g++ pkg-config git \
+    libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
+    libasound2-dev zlib1g-dev
+```
+
+检查就绪：`pkg-config --modversion libavformat` 应输出版本号。
+
+> 可选：SDL 桌面仿真另需 `libsdl2-dev`（见 ③）；Rockchip 硬解需板子自带 librga 与
+> 仓库分发的 RKMPP FFmpeg deb（见文末「依赖」）。
+
+### ② 机器本地编译（真机 / 通用 Linux）
+
+```sh
+git clone --recurse-submodules https://github.com/ZhangKeLiang0627/lvgl-video-player-demo
+cd lvgl-video-player-demo
 
 # 软解（系统 FFmpeg，通用板子）
 cmake -S . -B build
@@ -28,7 +41,7 @@ cmake --build build -j
 ./build/lvgl-video-player        # 默认竖屏；-r 90 横屏；--shot /tmp/ui.png 截一张图
 ```
 
-### ② SDL 桌面仿真（PC 上预览 UI，免真机）
+### ③ SDL 桌面仿真（PC 上预览 UI，免真机）
 
 ```sh
 sudo apt install -y libsdl2-dev
@@ -37,7 +50,7 @@ cmake --build build/sdl -j"$(nproc)"
 PLAYER_VIDEO=/path/to/video.mp4 ./build/sdl/lvgl-video-player   # 1280×800 窗口，鼠标当触摸
 ```
 
-### ③ 交叉编译（aarch64 板子，如 RK35xx）
+### ④ 交叉编译（aarch64 板子，如 RK35xx）
 
 ```sh
 sudo apt install -y g++-aarch64-linux-gnu
@@ -72,9 +85,10 @@ flowchart LR
 
 | 竖屏 0°（RK3566，800×1280） | 横屏 90°（RK3566，1280×800） | SDL 桌面仿真（1280×800） |
 | :---: | :---: | :---: |
-| ![portrait](docs/screenshots/portrait.png) | ![landscape](docs/screenshots/landscape.png) | ![sdl-sim](docs/screenshots/sdl_sim.png) |
+| ![portrait](https://cdn.jsdelivr.net/gh/ZhangKeLiang0627/lvgl-video-player-demo@master/docs/screenshots/portrait.png) | ![landscape](https://cdn.jsdelivr.net/gh/ZhangKeLiang0627/lvgl-video-player-demo@master/docs/screenshots/landscape.png) | ![sdl-sim](https://cdn.jsdelivr.net/gh/ZhangKeLiang0627/lvgl-video-player-demo@master/docs/screenshots/sdl_sim.png) |
 
 截图均由内置截屏工具在真机 / 桌面仿真运行中抓取（演示视频含实时时间戳与滚动文字）。
+若图片无法加载（网络原因），原件在 `docs/screenshots/` 目录可直接查看。
 
 ## 操作：运行参数 & 截图
 
