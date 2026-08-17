@@ -83,6 +83,7 @@ flowchart LR
 | FFmpeg 开发包 | 视频解码 | `sudo apt install libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev` | `pkg-config --modversion libavformat` 输出版本号 |
 | librga | RGA 2D 加速（YUV→RGB） | Rockchip 镜像自带；否则 `sudo apt install librga-dev` | `ls /usr/include/rga/rga.h` 存在 |
 | ALSA 开发包 | 音频输出 | `sudo apt install libasound2-dev` | `ls /usr/include/alsa/asoundlib.h` 存在 |
+| zlib | 截屏工具 PNG 编码（utils/lv_snapshot） | Ubuntu 自带（`libz`）；否则 `sudo apt install zlib1g-dev` | `ls /usr/include/zlib.h` 存在 |
 | 构建工具 | 编译 | `sudo apt install cmake g++ pkg-config git` | `cmake --version` 输出版本号 |
 
 **可选 — RKMPP 硬件解码**：系统自带的 FFmpeg 通常没有 `h264_rkmpp` 硬解器，
@@ -129,32 +130,52 @@ CMake 在 configure 阶段会自动给 LVGL 的 `lv_ffmpeg.c` 打补丁
 
 | 宏 | 默认值 | 说明 |
 |----|--------|------|
-| `VIDEO_PATH` | `/userdata/my_test.mp4` | 默认播放文件 |
+| `VIDEO_PATH` | `/tmp/l1080_long.mp4` | 默认播放文件 |
 | `TOUCH_DEV` | `/dev/input/event1` | 触摸屏输入设备 |
 | `AUDIO_DEV` | `plughw:0,0` | ALSA 播放设备 |
 | `ROOT_DIR` | `/userdata` | 文件浏览器根目录 |
 | `VOL_MAX_GAIN` | `2.0f` | 音量滑块最大增益 |
+| `DEFAULT_ROTATION` | `0` | 默认显示旋转角（0/90/180/270），`-r` / `LVGL_ROTATE` 可覆盖 |
+
+## 分辨率适配
+
+播放器**不写死屏幕尺寸**：启动时从 `/dev/fb0` 读取真实分辨率，并按
+`-r` 旋转角换算成逻辑分辨率（90/270 时宽高互换）。所有控件——按钮、
+进度条、音量条、标题、文件浏览器——都通过 `spct(W|H, 百分比)` 相对
+屏宽/屏高布局。因此换一块不同分辨率的板子（如 320×240 小屏）无需改
+任何代码，控件比例自动保持一致：
+
+| 屏（物理） | 旋转 | 逻辑分辨率 | 视频 contain-fit |
+|------|------|-----------|------------------|
+| 800×1280 | 0°（默认） | 800×1280 | 800×450 |
+| 800×1280 | 90° | 1280×800 | 1280×720 |
+
+触摸坐标由 LVGL 按旋转自动映射，无需额外处理。
 
 ## 运行与截屏
 
 ```sh
-./build/lvgl-video-player                        # 竖屏（默认）
-./build/lvgl-video-player -r 90                  # 横屏
-./build/lvgl-video-player --shot /tmp/ui.png     # 启动 2s 后截一张到 PNG
-./build/lvgl-video-player --shot-dir /tmp/shots --shot-period 3
-                                                  # 每 3s 截一张到 /tmp/shots/shot_NNN.png
+./build/lvgl-video-player                          # 竖屏（默认 0°）
+./build/lvgl-video-player -r 90                    # 横屏（顺时针 90°）
+./build/lvgl-video-player --rotate 270             # 270°
+LVGL_ROTATE=180 ./build/lvgl-video-player          # 环境变量方式
 ```
 
-`--shot` / `--shot-dir` 由 `utils/lv_snapshot` 提供：`lv_snapshot_take()`
-抓取当前屏快照为 RGB888 帧，再用手写 zlib 编码器生成真彩色 PNG（仅依赖
-`libz`，不引入 libpng）。也可在代码里直接调用：
+| 参数 | 说明 |
+|------|------|
+| `-r <deg>` / `--rotate <deg>` | 旋转角 0/90/180/270（默认 `DEFAULT_ROTATION`） |
+| `--shot <file>` | 启动 2s 后截一张屏到 PNG（README 预览图即由此生成） |
+| `--shot-dir <dir> [--shot-period <sec>]` | 周期性截屏到 `<dir>/shot_NNN.png`（默认每 5s） |
+| `LVGL_ROTATE=<deg>` | 环境变量设置旋转角，等价于 `-r` |
+
+截屏由 `utils/lv_snapshot` 提供：`lv_snapshot_take()` 抓取当前屏快照为
+RGB888 帧，再用手写 zlib 编码器生成真彩色 PNG（仅依赖 `libz`，不引入
+libpng）。也可在代码里直接调用：
 
 ```cpp
 #include "utils/lv_snapshot.h"
 lv_snapshot_save_png(lv_screen_active(), "/tmp/ui.png");
 ```
-
-环境变量 `LVGL_ROTATE=270` 也可设置默认旋转角（与 `-r` 等价）。
 
 ## 已知限制
 
