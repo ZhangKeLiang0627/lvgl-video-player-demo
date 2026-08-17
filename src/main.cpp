@@ -4,7 +4,7 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <cstdio>
+#include <iostream>
 
 int main(int argc, char ** argv)
 {
@@ -42,7 +42,7 @@ int main(int argc, char ** argv)
 
     g_screen.rotation = rotation;
 
-    fprintf(stderr, "[main] rotation=%d\n", rotation);
+    std::cerr << "[main] rotation=" << rotation << "\n";
 
     App app;
     if (!app.init())

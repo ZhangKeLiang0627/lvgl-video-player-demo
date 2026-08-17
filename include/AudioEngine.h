@@ -5,6 +5,7 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <vector>
 
 /* ALSA uses a typedef (snd_pcm_t), not a forward-declarable struct. */
 #include <alsa/asoundlib.h>
@@ -60,7 +61,7 @@ private:
     snd_pcm_t              * pcm_ = nullptr;
     struct AVPacket        * pkt_ = nullptr;
     struct AVFrame         * frame_ = nullptr;
-    int16_t                * outBuf_ = nullptr;
+    std::vector<int16_t>     outBuf_;   /* stereo S16 resample output */
 
     /* Slave-clock state, owned by the worker thread. */
     int64_t audioPosMs_  = 0;

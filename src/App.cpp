@@ -4,9 +4,11 @@
 #include "utils/lv_snapshot.h"
 #include "debugging/sysmon/lv_sysmon.h"
 
-#include <cstdio>
-#include <ctime>
-#include <unistd.h>
+#include <chrono>
+#include <cstdlib>
+#include <iostream>
+#include <sstream>
+#include <iomanip>
 #include <algorithm>
 
 App::App() : browser_(*this, ROOT_DIR), ui_(*this)
@@ -15,9 +17,8 @@ App::App() : browser_(*this, ROOT_DIR), ui_(*this)
 
 uint32_t App::nowMs()
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+    auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return (uint32_t)std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
 }
 
 bool App::init()
@@ -48,9 +49,9 @@ bool App::init()
         g_screen.w = g_screen.phys_w;
         g_screen.h = g_screen.phys_h;
     }
-    fprintf(stderr, "[init] fb=%dx%d rotation=%d logical=%dx%d\n",
-            g_screen.phys_w, g_screen.phys_h, g_screen.rotation,
-            g_screen.w, g_screen.h);
+    std::cerr << "[init] fb=" << g_screen.phys_w << "x" << g_screen.phys_h
+              << " rotation=" << g_screen.rotation
+              << " logical=" << g_screen.w << "x" << g_screen.h << "\n";
 
     lv_indev_t * touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, TOUCH_DEV);
     if (touch == nullptr)
@@ -77,7 +78,7 @@ bool App::init()
     }
 
     int32_t dur = player_.getDuration();
-    fprintf(stderr, "[init] duration_ms=%" LV_PRId32 "\n", dur);
+    std::cerr << "[init] duration_ms=" << dur << "\n";
 
     audio_.open(VIDEO_PATH);
     audio_.start();
@@ -141,13 +142,13 @@ void App::onTogglePlay()
         audio_.setPaused(true);
         ui_.setPlaying(false);
         playing_ = false;
-        fprintf(stderr, "[ui] paused\n");
+        std::cerr << "[ui] paused\n";
     } else {
         player_.resume();
         audio_.setPaused(false);
         ui_.setPlaying(true);
         playing_ = true;
-        fprintf(stderr, "[ui] resumed\n");
+        std::cerr << "[ui] resumed\n";
     }
 }
 
@@ -171,7 +172,7 @@ void App::onSeekRelease(int32_t ms)
         player_.seek(ms);                 /* re-anchor video wall-clock */
         audio_.requestSeek(ms);           /* signal audio thread to follow */
         seekSettleUntil_ = (int32_t)nowMs() + 300;
-        fprintf(stderr, "[ui] seek -> %" LV_PRId32 " ms\n", ms);
+        std::cerr << "[ui] seek -> " << ms << " ms\n";
     }
 }
 
@@ -182,7 +183,7 @@ void App::playFile(const std::string & path)
         player_.setSrc(path.c_str());
         player_.start();
         ui_.setNowPlaying(path.c_str());
-        fprintf(stderr, "[ui] play -> %s\n", path.c_str());
+        std::cerr << "[ui] play -> " << path << "\n";
     }
     audio_.reopen(path);
     browser_.close();
@@ -211,10 +212,11 @@ void App::fitToScreen(const char * path)
         int rw = 0, rh = 0;
         fitVideo(vw, vh, &rw, &rh);
         player_.resize(rw, rh);
-        fprintf(stderr, "[fit] %s %dx%d -> render %dx%d\n", path, vw, vh, rw, rh);
+        std::cerr << "[fit] " << path << " " << vw << "x" << vh
+                  << " -> render " << rw << "x" << rh << "\n";
     } else {
         player_.resize(g_screen.w, g_screen.h);   /* unknown size: fill the screen */
-        fprintf(stderr, "[fit] %s probe failed -> full screen\n", path);
+        std::cerr << "[fit] " << path << " probe failed -> full screen\n";
     }
 }
 
@@ -229,7 +231,7 @@ void App::startSnapshot(const std::string & dir, int periodSec)
     int period = periodSec > 0 ? periodSec : 5;
     lv_timer_t * t = lv_timer_create(snapshotTimerCb, (uint32_t)period * 1000, this);
     lv_timer_set_repeat_count(t, -1);   /* fire forever */
-    fprintf(stderr, "[snapshot] periodic: %s every %ds\n", dir.c_str(), period);
+    std::cerr << "[snapshot] periodic: " << dir << " every " << period << "s\n";
 }
 
 void App::takeSnapshotOnce(const std::string & path)
@@ -237,7 +239,7 @@ void App::takeSnapshotOnce(const std::string & path)
     shotOncePath_ = path;
     lv_timer_t * t = lv_timer_create(snapshotTimerCb, 2000, this);   /* let UI settle */
     lv_timer_set_repeat_count(t, 1);
-    fprintf(stderr, "[snapshot] one-shot: %s (after 2s)\n", path.c_str());
+    std::cerr << "[snapshot] one-shot: " << path << " (after 2s)\n";
 }
 
 void App::snapshotTimerCb(lv_timer_t * t)
@@ -250,9 +252,10 @@ void App::snapshotTick()
 {
     lv_obj_t * target = screen_ ? screen_ : lv_screen_active();
     if (!shotDir_.empty()) {
-        char path[256];
-        snprintf(path, sizeof(path), "%s/shot_%03d.png", shotDir_.c_str(), shotSeq_++);
-        lv_snapshot_save_png(target, path);
+        std::ostringstream oss;
+        oss << shotDir_ << "/shot_" << std::setw(3) << std::setfill('0')
+            << shotSeq_++ << ".png";
+        lv_snapshot_save_png(target, oss.str().c_str());
     }
     if (!shotOncePath_.empty()) {
         lv_snapshot_save_png(target, shotOncePath_.c_str());

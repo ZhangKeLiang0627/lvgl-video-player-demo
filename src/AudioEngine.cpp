@@ -1,10 +1,11 @@
 #include "AudioEngine.h"
 
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cinttypes>
-#include <unistd.h>
+#include <chrono>
+#include <iostream>
+#include <thread>
 
 extern "C" {
     #include <libavformat/avformat.h>
@@ -35,31 +36,31 @@ bool AudioEngine::openFile(const std::string & path)
 {
     AVFormatContext * fmt = nullptr;
     if (avformat_open_input(&fmt, path.c_str(), NULL, NULL) != 0) {
-        fprintf(stderr, "[audio] avformat_open_input failed: %s\n", path.c_str());
+        std::cerr << "[audio] avformat_open_input failed: " << path << "\n";
         return false;
     }
     if (avformat_find_stream_info(fmt, NULL) < 0) {
-        fprintf(stderr, "[audio] find_stream_info failed\n");
+        std::cerr << "[audio] find_stream_info failed\n";
         avformat_close_input(&fmt);
         return false;
     }
     int ast = av_find_best_stream(fmt, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
     if (ast < 0) {
-        fprintf(stderr, "[audio] no audio stream in %s\n", path.c_str());
+        std::cerr << "[audio] no audio stream in " << path << "\n";
         avformat_close_input(&fmt);
         return false;
     }
     AVCodecParameters * par = fmt->streams[ast]->codecpar;
     const AVCodec * dec = avcodec_find_decoder(par->codec_id);
     if (!dec) {
-        fprintf(stderr, "[audio] no decoder for codec_id=%d\n", par->codec_id);
+        std::cerr << "[audio] no decoder for codec_id=" << (int)par->codec_id << "\n";
         avformat_close_input(&fmt);
         return false;
     }
     AVCodecContext * ctx = avcodec_alloc_context3(dec);
     avcodec_parameters_to_context(ctx, par);
     if (avcodec_open2(ctx, dec, NULL) < 0) {
-        fprintf(stderr, "[audio] avcodec_open2 failed\n");
+        std::cerr << "[audio] avcodec_open2 failed\n";
         avcodec_free_context(&ctx);
         avformat_close_input(&fmt);
         return false;
@@ -68,7 +69,8 @@ bool AudioEngine::openFile(const std::string & path)
     snd_pcm_t * pcm = nullptr;
     int rc = snd_pcm_open(&pcm, AUDIO_DEV, SND_PCM_STREAM_PLAYBACK, 0);
     if (rc < 0) {
-        fprintf(stderr, "[audio] snd_pcm_open %s failed: %s\n", AUDIO_DEV, snd_strerror(rc));
+        std::cerr << "[audio] snd_pcm_open " << AUDIO_DEV
+                  << " failed: " << snd_strerror(rc) << "\n";
         avcodec_free_context(&ctx);
         avformat_close_input(&fmt);
         return false;
@@ -86,7 +88,7 @@ bool AudioEngine::openFile(const std::string & path)
     snd_pcm_uframes_t buf_frames = period * 4;   /* 2048 frames ~= 46 ms */
     snd_pcm_hw_params_set_buffer_size_near(pcm, hw, &buf_frames);
     if (snd_pcm_hw_params(pcm, hw) < 0) {
-        fprintf(stderr, "[audio] snd_pcm_hw_params failed\n");
+        std::cerr << "[audio] snd_pcm_hw_params failed\n";
         snd_pcm_close(pcm);
         avcodec_free_context(&ctx);
         avformat_close_input(&fmt);
@@ -104,7 +106,7 @@ bool AudioEngine::openFile(const std::string & path)
     av_opt_set_int(swr, "out_sample_rate", 44100, 0);
     av_opt_set_sample_fmt(swr, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
     if (swr_init(swr) < 0) {
-        fprintf(stderr, "[audio] swr_init failed\n");
+        std::cerr << "[audio] swr_init failed\n";
         swr_free(&swr);
         snd_pcm_close(pcm);
         avcodec_free_context(&ctx);
@@ -167,13 +169,13 @@ void AudioEngine::seekTo(int32_t target_ms)
 
     audioPosMs_   = target_ms;
     audioPrimed_  = 0;
-    fprintf(stderr, "[audio] seek -> target=%" PRId32 "\n", target_ms);
+    std::cerr << "[audio] seek -> target=" << target_ms << "\n";
 }
 
 void AudioEngine::open(const std::string & path)
 {
     if (!openFile(path)) {
-        fprintf(stderr, "[audio] initial open failed; running without audio\n");
+        std::cerr << "[audio] initial open failed; running without audio\n";
     }
 }
 
@@ -191,7 +193,7 @@ void AudioEngine::start()
     if (running_.load()) return;
     pkt_    = av_packet_alloc();
     frame_  = av_frame_alloc();
-    outBuf_ = (int16_t *)malloc(8192 * 2 * sizeof(int16_t));
+    outBuf_.resize(8192 * 2);           /* 8192 stereo S16 frames */
     running_.store(true);
     thread_ = std::thread(&AudioEngine::worker, this);
 }
@@ -215,15 +217,18 @@ void AudioEngine::worker()
             closeFile();
             if (openFile(path)) {
                 audioPosMs_ = 0; audioPrimed_ = 0; audioSuspended_ = 0;
-                fprintf(stderr, "[audio] reopened -> %s\n", path.c_str());
+                std::cerr << "[audio] reopened -> " << path << "\n";
             } else {
-                fprintf(stderr, "[audio] reopen failed: %s\n", path.c_str());
+                std::cerr << "[audio] reopen failed: " << path << "\n";
             }
             audioReopen_.store(0);
-            usleep(20000);
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
             continue;
         }
-        if (!fmt_) { usleep(50000); continue; }
+        if (!fmt_) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
 
         int32_t vt = videoMs_.load();   /* master clock */
 
@@ -235,21 +240,21 @@ void AudioEngine::worker()
             if (!audioSuspended_) {
                 snd_pcm_drop(pcm_);
                 audioSuspended_ = 1;
-                fprintf(stderr, "[audio] suspended\n");
+                std::cerr << "[audio] suspended\n";
             }
-            usleep(20000);
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
             continue;
         } else if (audioSuspended_) {
             seekTo(vt);
             audioSuspended_ = 0;
-            fprintf(stderr, "[audio] resumed -> vt=%" PRId32 "\n", vt);
+            std::cerr << "[audio] resumed -> vt=" << vt << "\n";
         }
 
         if (audioPrimed_ &&
             (vt > audioPosMs_ + 800 || audioPosMs_ > vt + 800)) {
             seekTo(vt);
-            fprintf(stderr, "[audio] drift-correct -> vt=%" PRId32 " audio=%" PRId64 "\n",
-                    vt, audioPosMs_);
+            std::cerr << "[audio] drift-correct -> vt=" << vt
+                      << " audio=" << audioPosMs_ << "\n";
         }
 
         while (av_read_frame(fmt_, pkt_) >= 0) {
@@ -268,20 +273,20 @@ void AudioEngine::worker()
             }
             if (avcodec_send_packet(ctx_, pkt_) == 0) {
                 while (avcodec_receive_frame(ctx_, frame_) == 0) {
-                    uint8_t * out_ptr = (uint8_t *)outBuf_;
+                    uint8_t * out_ptr = (uint8_t *)outBuf_.data();
                     int out_samples = swr_convert(swr_, &out_ptr, 8192,
                                                   (const uint8_t **)frame_->data,
                                                   frame_->nb_samples);
                     if (out_samples > 0) {
                         float vol = volume_.load();
-                        int16_t * p = outBuf_;
+                        int16_t * p = outBuf_.data();
                         for (int s = 0; s < out_samples * 2; s++) {
                             int v = (int)(p[s] * vol);
                             if (v > 32767) v = 32767;
                             else if (v < -32768) v = -32768;
                             p[s] = (int16_t)v;
                         }
-                        snd_pcm_sframes_t w = snd_pcm_writei(pcm_, outBuf_, out_samples);
+                        snd_pcm_sframes_t w = snd_pcm_writei(pcm_, outBuf_.data(), out_samples);
                         if (w < 0) snd_pcm_recover(pcm_, (int)w, 1);
                         audioPosMs_ += (int64_t)out_samples * 1000 / 44100;
                         audioPrimed_ = 1;
@@ -299,7 +304,6 @@ void AudioEngine::worker()
 
     if (pkt_)   { av_packet_free(&pkt_);   pkt_ = nullptr; }
     if (frame_) { av_frame_free(&frame_);  frame_ = nullptr; }
-    free(outBuf_);
-    outBuf_ = nullptr;
+    outBuf_.clear();
     running_.store(false);
 }

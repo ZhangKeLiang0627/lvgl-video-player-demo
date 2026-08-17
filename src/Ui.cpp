@@ -87,7 +87,16 @@ void Ui::build(lv_obj_t * screen)
     lv_obj_set_style_bg_color(vol_slider, lv_color_make(0x42, 0xA5, 0xF5), LV_PART_KNOB);
     volLabel_ = lv_label_create(screen);
     lv_label_set_text_fmt(volLabel_, "Vol %d", VOL_DEFAULT);
+    /* Same dark chip backing as the title / time labels so the text stays
+     * readable over the video (it used to float bare over the picture). */
+    lv_obj_set_style_text_color(volLabel_, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(volLabel_, lv_color_make(0x00, 0x00, 0x00), 0);
+    lv_obj_set_style_bg_opa(volLabel_, 140, 0);
+    lv_obj_set_style_pad_hor(volLabel_, 10, 0);
+    lv_obj_set_style_pad_ver(volLabel_, 4, 0);
+    lv_obj_set_style_radius(volLabel_, 8, 0);
     lv_obj_align_to(volLabel_, vol_slider, LV_ALIGN_OUT_TOP_MID, 0, -spct(H, 1));
+    lv_obj_move_foreground(volLabel_);
     lv_obj_add_event_cb(vol_slider, volSliderCb, LV_EVENT_VALUE_CHANGED, &app_);
 }
 

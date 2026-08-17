@@ -1,9 +1,10 @@
 #include "utils/lv_snapshot.h"
 
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
+#include <fstream>
+#include <iostream>
 
 #include <zlib.h>
 
@@ -22,21 +23,23 @@ static void be32(uint8_t out[4], uint32_t v)
 }
 
 /* Write one PNG chunk: length + type + data + CRC32(type+data). */
-static int png_write_chunk(FILE * f, const char type[4], const uint8_t * data, uint32_t len)
+static int png_write_chunk(std::ofstream & f, const char type[4],
+                           const uint8_t * data, uint32_t len)
 {
     uint8_t hdr[4];
     be32(hdr, len);
-    if(fwrite(hdr, 1, 4, f) != 4) return -1;
-    if(fwrite(type, 1, 4, f) != 4) return -1;
-    if(len && fwrite(data, 1, len, f) != len) return -1;
+    f.write((const char *)hdr, 4);
+    f.write(type, 4);
+    if (len) f.write((const char *)data, len);
+    if (!f.good()) return -1;
 
     uLong crc = crc32(0L, Z_NULL, 0);
     crc = crc32(crc, (const Bytef *)type, 4);
-    if(len) crc = crc32(crc, data, len);
+    if (len) crc = crc32(crc, data, len);
     uint8_t crcb[4];
     be32(crcb, (uint32_t)crc);
-    if(fwrite(crcb, 1, 4, f) != 4) return -1;
-    return 0;
+    f.write((const char *)crcb, 4);
+    return f.good() ? 0 : -1;
 }
 
 int lv_snapshot_save_png(lv_obj_t * obj, const char * path)
@@ -46,7 +49,7 @@ int lv_snapshot_save_png(lv_obj_t * obj, const char * path)
     /* 1. Snapshot the object tree into a draw buffer at RGB888 (24-bit). */
     lv_draw_buf_t * buf = lv_snapshot_take(obj, LV_COLOR_FORMAT_RGB888);
     if(!buf) {
-        fprintf(stderr, "[snapshot] lv_snapshot_take failed (LV_USE_SNAPSHOT enabled?)\n");
+        std::cerr << "[snapshot] lv_snapshot_take failed (LV_USE_SNAPSHOT enabled?)\n";
         return -1;
     }
 
@@ -55,7 +58,7 @@ int lv_snapshot_save_png(lv_obj_t * obj, const char * path)
     const uint32_t stride = buf->header.stride;
     const uint8_t * px = buf->data;
     if(w == 0 || h == 0 || !px) {
-        fprintf(stderr, "[snapshot] bad draw buf (%ux%u)\n", w, h);
+        std::cerr << "[snapshot] bad draw buf (" << w << "x" << h << ")\n";
         lv_draw_buf_destroy(buf);
         return -1;
     }
@@ -91,7 +94,7 @@ int lv_snapshot_save_png(lv_obj_t * obj, const char * path)
         return -1;
     }
     if(compress2(comp, &comp_len, raw, (uLong)raw_size, 6) != Z_OK) {
-        fprintf(stderr, "[snapshot] zlib compress2 failed\n");
+        std::cerr << "[snapshot] zlib compress2 failed\n";
         free(comp);
         free(raw);
         lv_draw_buf_destroy(buf);
@@ -99,9 +102,9 @@ int lv_snapshot_save_png(lv_obj_t * obj, const char * path)
     }
 
     /* 4. Assemble the PNG file. */
-    FILE * f = fopen(path, "wb");
+    std::ofstream f(path, std::ios::binary);
     if(!f) {
-        fprintf(stderr, "[snapshot] cannot open %s\n", path);
+        std::cerr << "[snapshot] cannot open " << path << "\n";
         free(comp);
         free(raw);
         lv_draw_buf_destroy(buf);
@@ -109,7 +112,7 @@ int lv_snapshot_save_png(lv_obj_t * obj, const char * path)
     }
 
     static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
-    fwrite(sig, 1, 8, f);
+    f.write((const char *)sig, 8);
 
     uint8_t ihdr[13];
     be32(ihdr + 0, w);
@@ -123,11 +126,11 @@ int lv_snapshot_save_png(lv_obj_t * obj, const char * path)
     png_write_chunk(f, "IDAT", comp, (uint32_t)comp_len);
     png_write_chunk(f, "IEND", NULL, 0);
 
-    fclose(f);
+    f.close();
     free(comp);
     free(raw);
     lv_draw_buf_destroy(buf);
 
-    fprintf(stderr, "[snapshot] saved %ux%u -> %s\n", w, h, path);
+    std::cerr << "[snapshot] saved " << w << "x" << h << " -> " << path << "\n";
     return 0;
 }

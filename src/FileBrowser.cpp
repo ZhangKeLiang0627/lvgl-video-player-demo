@@ -7,8 +7,10 @@
 #include <cstring>
 #include <algorithm>
 #include <utility>
-#include <sys/stat.h>
-#include <dirent.h>
+#include <filesystem>
+#include <system_error>
+
+namespace fs = std::filesystem;
 
 static const char * kVideoExts[] = {
     "mp4","mkv","avi","mov","webm","ts","m4v","flv",
@@ -102,24 +104,25 @@ void FileBrowser::render()
         lv_obj_add_event_cb(b, itemCb, LV_EVENT_CLICKED, this);
     }
 
-    DIR * d = opendir(curDir_.c_str());
-    if (d) {
-        struct dirent * de;
-        while ((de = readdir(d)) != nullptr) {
-            if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
-                continue;
-            std::string full = curDir_ + "/" + de->d_name;
-            struct stat st;
-            if (stat(full.c_str(), &st) != 0) continue;
-            bool isdir = S_ISDIR(st.st_mode);
-            if (!isdir && !isVideoExt(de->d_name)) continue;  /* hide non-video */
+    /* Directory listing via std::filesystem (no POSIX dirent/stat). */
+    std::error_code ec;
+    fs::directory_iterator it(curDir_, ec), end;
+    if (!ec) {
+        for (; it != end; it.increment(ec)) {
+            if (ec) break;
+            const fs::directory_entry & de = *it;
+            std::string name = de.path().filename().string();
+            std::string full = de.path().string();
+            std::error_code dec;
+            bool isdir = de.is_directory(dec);
+            if (dec) isdir = false;
+            if (!isdir && !isVideoExt(name.c_str())) continue;  /* hide non-video */
             BrowserEntry e;
-            e.name  = de->d_name;
-            e.full  = full;
+            e.name  = std::move(name);
+            e.full  = std::move(full);
             e.isdir = isdir;
             entries_.push_back(std::move(e));
         }
-        closedir(d);
     }
 
     /* folders first, then alphabetical */
@@ -156,8 +159,8 @@ void FileBrowser::onItem(int index)
     }
     if (index >= (int)entries_.size()) return;
     const BrowserEntry & e = entries_[index];
-    struct stat st;
-    if (stat(e.full.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+    std::error_code ec;
+    if (fs::is_directory(e.full, ec) && !ec) {
         curDir_ = e.full;
         render();
     } else {
