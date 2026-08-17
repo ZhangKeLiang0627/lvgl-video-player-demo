@@ -91,9 +91,11 @@ add_executable(lvgl-video-player ${APP_SOURCES})
 
 # Tell the app which backend to init at runtime: PLAYER_USE_SDL=1 -> SDL window,
 # otherwise the Linux framebuffer (/dev/fb0). Same macro pattern as
-# Keyboard-Guide's KEYBOARD_GUIDE_USE_SDL.
+# Keyboard-Guide's KEYBOARD_GUIDE_USE_SDL. LV_USE_SDL is also needed by the app
+# because lv_sdl_window.h only exposes its API under #if LV_USE_SDL.
 target_compile_definitions(lvgl-video-player PRIVATE
-    PLAYER_USE_SDL=$<IF:$<BOOL:${ENABLE_SDL}>,1,0>)
+    PLAYER_USE_SDL=$<IF:$<BOOL:${ENABLE_SDL}>,1,0>
+    $<$<BOOL:${ENABLE_SDL}>:LV_USE_SDL=1>)
 
 # The Rockchip FFmpeg .pc files are dpkg-packed with prefix=/usr, so they
 # contribute no -I/-L of their own. Add the prefix paths explicitly so

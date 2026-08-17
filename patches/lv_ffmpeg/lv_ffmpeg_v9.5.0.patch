@@ -1,8 +1,8 @@
 diff --git a/src/libs/ffmpeg/lv_ffmpeg.c b/src/libs/ffmpeg/lv_ffmpeg.c
-index bd74fe0..4cdb82e 100644
+index bd74fe0..6143ac3 100644
 --- a/src/libs/ffmpeg/lv_ffmpeg.c
 +++ b/src/libs/ffmpeg/lv_ffmpeg.c
-@@ -1,1017 +1,1481 @@
+@@ -1,1017 +1,1485 @@
 -/**
 - * @file lv_ffmpeg.c
 - *
@@ -2144,7 +2144,9 @@ index bd74fe0..4cdb82e 100644
 +
 +    struct ffmpeg_context_s * ffmpeg_ctx = lv_malloc_zeroed(sizeof(struct ffmpeg_context_s));
 +    LV_ASSERT_MALLOC(ffmpeg_ctx);
++#if LV_FFMPEG_USE_RGA
 +    ffmpeg_ctx->rga_fd = -1;   /* -1 = dma_buf scratch not yet allocated */
++#endif
 +    if(ffmpeg_ctx == NULL) {
 +        LV_LOG_ERROR("ffmpeg_ctx malloc failed");
 +        goto failed;
@@ -2292,6 +2294,7 @@ index bd74fe0..4cdb82e 100644
 +
 +    sws_freeContext(ffmpeg_ctx->sws_ctx);
 +    av_frame_free(&ffmpeg_ctx->sw_frame);
++#if LV_FFMPEG_USE_RGA
 +    av_frame_free(&ffmpeg_ctx->rga_nv12);
 +    if(ffmpeg_ctx->rga_va) {
 +        munmap(ffmpeg_ctx->rga_va, ffmpeg_ctx->rga_size);
@@ -2301,6 +2304,7 @@ index bd74fe0..4cdb82e 100644
 +        close(ffmpeg_ctx->rga_fd);
 +        ffmpeg_ctx->rga_fd = -1;
 +    }
++#endif
 +    ffmpeg_close_src_ctx(ffmpeg_ctx);
 +    ffmpeg_close_dst_ctx(ffmpeg_ctx);
 +    if(ffmpeg_ctx->io_ctx != NULL) {
